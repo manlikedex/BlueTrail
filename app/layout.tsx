@@ -1,10 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "BlueTrail",
   description: "Track dives, discover species and help protect the ocean.",
-  applicationName: "BlueTrail",
   appleWebApp: {
     capable: true,
     title: "BlueTrail",
@@ -31,3 +30,4 @@ export default function RootLayout({
     </html>
   );
 }
+

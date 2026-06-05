@@ -7,12 +7,22 @@ import { supabase } from "../../lib/supabase";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  async function login() {
+  async function handleLogin() {
+    if (!email || !password) {
+      alert("Please enter your email and password.");
+      return;
+    }
+
+    setLoading(true);
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+
+    setLoading(false);
 
     if (error) {
       alert(error.message);
@@ -31,6 +41,7 @@ export default function LoginPage() {
         <input
           className="mt-8 w-full rounded-2xl border border-white/10 bg-[#082C46] p-4 outline-none"
           placeholder="Email"
+          type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -44,16 +55,14 @@ export default function LoginPage() {
         />
 
         <button
-          onClick={login}
-          className="mt-6 w-full rounded-3xl bg-[#00D4C8] py-4 font-black text-[#031B2E]"
+          onClick={handleLogin}
+          disabled={loading}
+          className="mt-6 w-full rounded-3xl bg-[#00D4C8] py-4 font-black text-[#031B2E] disabled:opacity-50"
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
 
-        <Link
-          href="/signup"
-          className="mt-5 block text-center text-sm text-cyan-200"
-        >
+        <Link href="/signup" className="mt-5 block text-center text-sm text-cyan-200">
           New to BlueTrail? Create account
         </Link>
       </section>
