@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import AlphaNotice from "../components/AlphaNotice";
+<AlphaNotice />
 
 const slides = [
   {

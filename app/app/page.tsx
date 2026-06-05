@@ -1,20 +1,28 @@
 import AppScreen from "../../components/AppScreen";
 import Link from "next/link";
+import AlphaNotice from "../../components/AlphaNotice";
 
 export default function AppHomePage() {
   return (
     <AppScreen>
+
+      
+
       <header className="flex items-center justify-between">
         <div>
           <p className="text-sm text-cyan-100/60">Welcome back</p>
           <h1 className="text-3xl font-black text-[#9FFFE0]">BlueTrail</h1>
         </div>
 
+        
+
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-xl">
           🌊
         </div>
       </header>
-
+<div className="mt-6">
+  <AlphaNotice />
+</div>
       <section className="mt-6 rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur">
         <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#00D4C8]">
           Next Dive
