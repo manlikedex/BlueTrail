@@ -35,6 +35,11 @@ export default function BottomNav() {
       label: "Explore",
     },
     {
+  href: "/map",
+  icon: Map,
+  label: "Map",
+},
+    {
       href: "/profile",
       icon: User,
       label: "Profile",

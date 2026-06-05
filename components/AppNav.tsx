@@ -7,6 +7,7 @@ const navItems = [
   { href: "/app", label: "Home", icon: "⌂" },
   { href: "/track", label: "Dive", icon: "◉" },
   { href: "/explore", label: "Explore", icon: "⌕" },
+  { href: "/map", label: "Map", icon: "◉" },
   { href: "/ocean-care", label: "Protect", icon: "♻" },
   { href: "/profile", label: "Profile", icon: "◌" },
 ];

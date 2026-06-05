@@ -5,23 +5,20 @@ import { useParams } from "next/navigation";
 import AppScreen from "../../../components/AppScreen";
 import AuthGuard from "../../../components/AuthGuard";
 import GlassCard from "../../../components/ui/GlassCard";
-import BeachReportForm from "../../../components/BeachReportForm";
-import BeachReports from "../../../components/BeachReports";
 import ForecastSlider from "../../../components/ForecastSlider";
 import ForecastSummary from "../../../components/ForecastSummary";
 import { supabase } from "../../../lib/supabase";
-import SaveBeachButton from "../../../components/SaveBeachButton";
+import SaveDiveSiteButton from "../../../components/SaveDiveSiteButton";
 
-type Beach = {
+type DiveSite = {
   id: number;
   name: string;
   slug: string;
-  town: string | null;
   region: string | null;
-  country: string | null;
   latitude: number;
   longitude: number;
-  notes: string | null;
+  site_type: string | null;
+  description: string | null;
 };
 
 type HourlyForecast = {
@@ -46,23 +43,23 @@ type Conditions = {
   hourly: HourlyForecast[];
 };
 
-export default function BeachPage() {
+export default function DiveSitePage() {
   const { slug } = useParams();
 
-  const [beach, setBeach] = useState<Beach | null>(null);
+  const [site, setSite] = useState<DiveSite | null>(null);
   const [conditions, setConditions] = useState<Conditions | null>(null);
   const [loading, setLoading] = useState(true);
   const [conditionsLoading, setConditionsLoading] = useState(false);
 
   useEffect(() => {
-    loadBeach();
+    loadSite();
   }, [slug]);
 
-  async function loadBeach() {
+  async function loadSite() {
     setLoading(true);
 
     const { data, error } = await supabase
-      .from("beaches")
+      .from("dive_sites")
       .select("*")
       .eq("slug", slug)
       .single();
@@ -70,26 +67,26 @@ export default function BeachPage() {
     setLoading(false);
 
     if (error || !data) {
-      alert("Beach not found.");
+      alert("Dive site not found.");
       return;
     }
 
-    setBeach(data);
+    setSite(data);
     loadConditions(data);
   }
 
-  async function loadConditions(selectedBeach: Beach) {
+  async function loadConditions(selectedSite: DiveSite) {
     setConditionsLoading(true);
 
     try {
       const res = await fetch(
-        `/api/conditions?lat=${selectedBeach.latitude}&lon=${selectedBeach.longitude}`
+        `/api/conditions?lat=${selectedSite.latitude}&lon=${selectedSite.longitude}`
       );
 
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || "Could not load beach forecast.");
+        alert(data.error || "Could not load dive site forecast.");
         setConditionsLoading(false);
         return;
       }
@@ -99,7 +96,7 @@ export default function BeachPage() {
         hourly: data.hourly || [],
       });
     } catch {
-      alert("Could not load beach forecast.");
+      alert("Could not load dive site forecast.");
     }
 
     setConditionsLoading(false);
@@ -132,17 +129,17 @@ export default function BeachPage() {
     return (
       <AuthGuard>
         <AppScreen>
-          <p className="text-[#A9C7D8]">Loading beach...</p>
+          <p className="text-[#A9C7D8]">Loading dive site...</p>
         </AppScreen>
       </AuthGuard>
     );
   }
 
-  if (!beach) {
+  if (!site) {
     return (
       <AuthGuard>
         <AppScreen>
-          <h1 className="text-3xl font-black">Beach not found</h1>
+          <h1 className="text-3xl font-black">Dive site not found</h1>
         </AppScreen>
       </AuthGuard>
     );
@@ -153,31 +150,43 @@ export default function BeachPage() {
       <AppScreen>
         <section>
           <p className="text-xs font-black uppercase tracking-[0.25em] text-[#00D4C8]">
-            {beach.town ? `${beach.town}, ` : ""}
-            {beach.region}
+            {site.site_type || "Dive Site"}
+            {site.region ? ` • ${site.region}` : ""}
           </p>
 
-          <h1 className="mt-3 text-5xl font-black tracking-tight">
-            {beach.name}
-          </h1>
-
-          {beach.notes && (
+          
+          {site.description && (
             <p className="mt-4 text-sm leading-6 text-[#A9C7D8]">
-              {beach.notes}
+              {site.description}
             </p>
           )}
         </section>
 
-        <SaveBeachButton beachId={beach.id} />
+        <section>
+
+
+  <h1 className="mt-3 text-5xl font-black tracking-tight">
+    {site.name}
+  </h1>
+
+  {site.description && (
+    <p className="mt-4 text-sm leading-6 text-[#A9C7D8]">
+      {site.description}
+    </p>
+  )}
+</section>
+
+<SaveDiveSiteButton diveSiteId={site.id} />
+
+
 
         {conditionsLoading && (
           <GlassCard className="mt-6">
             <p className="font-black text-[#9FFFE0]">
               Loading live forecast...
             </p>
-
             <p className="mt-2 text-sm text-[#A9C7D8]">
-              Fetching latest wind, wave, swell and visibility data.
+              Fetching latest wind, waves, swell and visibility.
             </p>
           </GlassCard>
         )}
@@ -197,32 +206,14 @@ export default function BeachPage() {
 
         <GlassCard className="mt-4">
           <p className="text-xs font-black uppercase tracking-[0.25em] text-[#00D4C8]">
-            Tides
+            Site Safety
           </p>
 
           <p className="mt-3 text-sm leading-6 text-white">
-            Tide times are next. We’ll connect this section to a licensed tide
-            API for high tide, low tide, tide height and tide state.
+            Always check tides, currents, entry and exit points, local warnings,
+            boat traffic and your own ability before diving this site.
           </p>
         </GlassCard>
-
-        <GlassCard className="mt-4">
-          <p className="text-xs font-black uppercase tracking-[0.25em] text-[#00D4C8]">
-            Safety
-          </p>
-
-          <p className="mt-3 text-sm leading-6 text-white">
-            Forecast data is guidance only. Always check local signs, tide
-            times, currents, visibility, entry/exit points and official warnings
-            before entering the water.
-          </p>
-        </GlassCard>
-
-        <div className="mt-6">
-          <BeachReportForm beachId={beach.id} />
-        </div>
-
-        <BeachReports beachId={beach.id} />
       </AppScreen>
     </AuthGuard>
   );
