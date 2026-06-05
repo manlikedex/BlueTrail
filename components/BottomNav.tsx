@@ -30,6 +30,11 @@ export default function BottomNav() {
       label: "Track",
     },
     {
+      href: "/ocean-care",
+      icon: Map,
+      label: "Protect the Ocean",
+    },
+    {
       href: "/explore",
       icon: Compass,
       label: "Explore",
