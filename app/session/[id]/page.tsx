@@ -154,9 +154,12 @@ export default function ActiveSessionPage() {
         </GlassCard>
 
         <div className="mt-6">
-          <PrimaryButton onClick={endSession} danger>
-            {ending ? "Saving Session..." : "End Session"}
-          </PrimaryButton>
+          <PrimaryButton
+  onClick={endSession}
+  className="border-red-400/40 bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.25)]"
+>
+  {ending ? "Saving Session..." : "End Session"}
+</PrimaryButton>
         </div>
       </AppScreen>
     </AuthGuard>

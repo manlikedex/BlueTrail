@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 export default function AuthGuard({
@@ -8,28 +9,41 @@ export default function AuthGuard({
 }: {
   children: React.ReactNode;
 }) {
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    checkUser();
+    checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.push("/login");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  async function checkUser() {
+  async function checkSession() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
 
     if (!session) {
-      window.location.href = "/login";
+      router.push("/login");
       return;
     }
 
-    setLoading(false);
+    setChecking(false);
   }
 
-  if (loading) {
+  if (checking) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#031B2E] text-white">
+      <main className="flex min-h-screen items-center justify-center bg-[#020B14] text-white">
         Loading...
       </main>
     );
