@@ -2,18 +2,43 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, House, Map, Shield, User } from "lucide-react";
+import { Compass, House, Map, Shield, User, Activity } from "lucide-react";
 
 export default function BottomNav() {
   const pathname = usePathname();
 
-  const items = [
-    { href: "/app", icon: House, label: "Home" },
-    { href: "/explore", icon: Compass, label: "Explore" },
-    { href: "/map", icon: Map, label: "Map" },
-    { href: "/ocean-care", icon: Shield, label: "Protect" },
-    { href: "/profile", icon: User, label: "Profile" },
-  ];
+ const items = [
+  {
+    href: "/app",
+    icon: House,
+    label: "Home",
+  },
+  {
+    href: "/explore",
+    icon: Compass,
+    label: "Explore",
+  },
+  {
+    href: "/map",
+    icon: Map,
+    label: "Map",
+  },
+  {
+    href: "/track",
+    icon: Activity,
+    label: "Track",
+  },
+  {
+    href: "/ocean-care",
+    icon: Shield,
+    label: "Protect",
+  },
+  {
+    href: "/profile",
+    icon: User,
+    label: "Profile",
+  },
+];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#1A2330] bg-[#05070A]/95 backdrop-blur-xl">
