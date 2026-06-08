@@ -7,6 +7,7 @@ import { Activity, MapPin, Square, Waves, WifiOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import GlassCard from "./ui/GlassCard";
 import PrimaryButton from "./ui/PrimaryButton";
+import DiveCamera from "./DiveCamera";
 import type { RoutePoint } from "./DiveRouteMap";
 
 const DiveRouteMap = dynamic(() => import("./DiveRouteMap"), {
@@ -36,7 +37,6 @@ function getOfflinePoints(): OfflineRoutePoint[] {
 
 function saveOfflinePoint(point: OfflineRoutePoint) {
   const current = getOfflinePoints();
-
   localStorage.setItem(OFFLINE_ROUTE_KEY, JSON.stringify([...current, point]));
 }
 
@@ -91,6 +91,7 @@ export default function DiveTracker() {
 
   const [locationName, setLocationName] = useState("");
   const [maxDepth, setMaxDepth] = useState("");
+  const [descents, setDescents] = useState("");
   const [waterTemp, setWaterTemp] = useState("");
   const [visibility, setVisibility] = useState("");
   const [notes, setNotes] = useState("");
@@ -274,8 +275,11 @@ export default function DiveTracker() {
         ended_at: now,
         duration_seconds: seconds,
         max_depth: maxDepth ? Number(maxDepth) : null,
+        descents: descents ? Number(descents) : null,
         water_temp: waterTemp ? Number(waterTemp) : null,
         visibility: visibility ? Number(visibility) : null,
+        location_name: locationName || null,
+        title: locationName || "Tracked Dive",
         notes: notes || null,
         status: "completed",
       })
@@ -312,9 +316,8 @@ export default function DiveTracker() {
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-[#9CA8B8]">
-          Start a dive, record your GPS route, then add depth, temperature,
-          visibility and notes when you finish. Offline GPS points will sync
-          automatically when you come back online.
+          Start a dive, record your GPS route, capture marine life photos, then
+          add depth, descents, temperature, visibility and notes when you finish.
         </p>
       </GlassCard>
 
@@ -388,8 +391,8 @@ export default function DiveTracker() {
           <p className="text-xl font-black">Live dive session</p>
 
           <p className="mt-2 text-sm leading-6 text-[#9CA8B8]">
-            Keep the app open while tracking. Add your depth and conditions
-            before ending the dive.
+            Keep the app open while tracking. Capture marine life during the
+            session and add your dive details before ending.
           </p>
 
           <div className="mt-5 grid grid-cols-2 gap-3">
@@ -398,6 +401,14 @@ export default function DiveTracker() {
               onChange={(event) => setMaxDepth(event.target.value)}
               type="number"
               placeholder="Max depth (m)"
+              className="rounded-xl border border-[#1A2330] bg-[#05070A] px-4 py-4 text-white outline-none placeholder:text-[#6F7A89]"
+            />
+
+            <input
+              value={descents}
+              onChange={(event) => setDescents(event.target.value)}
+              type="number"
+              placeholder="Descents"
               className="rounded-xl border border-[#1A2330] bg-[#05070A] px-4 py-4 text-white outline-none placeholder:text-[#6F7A89]"
             />
 
@@ -421,7 +432,7 @@ export default function DiveTracker() {
               value={locationName}
               onChange={(event) => setLocationName(event.target.value)}
               placeholder="Location"
-              className="rounded-xl border border-[#1A2330] bg-[#05070A] px-4 py-4 text-white outline-none placeholder:text-[#6F7A89]"
+              className="col-span-2 rounded-xl border border-[#1A2330] bg-[#05070A] px-4 py-4 text-white outline-none placeholder:text-[#6F7A89]"
             />
           </div>
 
@@ -431,6 +442,8 @@ export default function DiveTracker() {
             placeholder="Dive notes..."
             className="mt-3 min-h-[120px] w-full rounded-xl border border-[#1A2330] bg-[#05070A] px-4 py-4 text-white outline-none placeholder:text-[#6F7A89]"
           />
+
+          {sessionId && <DiveCamera sessionId={sessionId} />}
 
           <button
             onClick={endDive}
