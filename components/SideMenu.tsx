@@ -14,6 +14,8 @@ import {
   User,
 } from "lucide-react";
 
+import { Satellite } from "lucide-react";
+
 const menuItems = [
   {
     href: "/app",
@@ -40,6 +42,11 @@ const menuItems = [
     icon: Fish,
     label: "Species Guide",
   },
+  {
+  href: "/tagged-animals",
+  icon: Satellite,
+  label: "Tagged Animals",
+},
   {
     href: "/store",
     icon: Store,
