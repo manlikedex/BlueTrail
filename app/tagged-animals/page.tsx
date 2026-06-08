@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   ExternalLink,
   Fish,
@@ -13,9 +14,14 @@ import {
 import AppScreen from "../../components/AppScreen";
 import AuthGuard from "../../components/AuthGuard";
 import GlassCard from "../../components/ui/GlassCard";
-import TaggedAnimalMap, {
-  MarineSighting,
-} from "../../components/TaggedAnimalMap";
+import type { MarineSighting } from "../../components/TaggedAnimalMap";
+
+const TaggedAnimalMap = dynamic(
+  () => import("../../components/TaggedAnimalMap"),
+  {
+    ssr: false,
+  }
+);
 
 const groups = ["All", "Shark", "Whale", "Cetacean"];
 
@@ -63,6 +69,18 @@ export default function TaggedAnimalsPage() {
       return matchesGroup && matchesSearch;
     });
   }, [sightings, activeGroup, query]);
+
+  const groupedSightings = useMemo(() => {
+    return groups
+      .filter((group) => group !== "All")
+      .map((group) => ({
+        group,
+        items: filteredSightings.filter(
+          (item) => item.species_group === group
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [filteredSightings]);
 
   const speciesCount = new Set(
     filteredSightings.map((item) => item.scientific_name)
@@ -151,7 +169,7 @@ export default function TaggedAnimalsPage() {
               className="w-full bg-transparent text-white outline-none placeholder:text-[#6F7A89]"
               placeholder="Search shark, dolphin, whale..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </div>
 
@@ -199,59 +217,80 @@ export default function TaggedAnimalsPage() {
               </p>
             </GlassCard>
           ) : (
-            <div className="grid gap-3">
-              {filteredSightings.map((item) => (
-                <GlassCard key={item.id}>
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#1A2330] bg-[#10161E]">
-                      {item.species_group === "Whale" ||
-                      item.species_group === "Cetacean" ? (
-                        <Waves className="text-[#0094FF]" size={23} />
-                      ) : (
-                        <Fish className="text-[#0094FF]" size={23} />
-                      )}
-                    </div>
+            <div className="grid gap-6">
+              {groupedSightings.map((section) => (
+                <div key={section.group}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-xs font-black uppercase tracking-[0.25em] text-[#0094FF]">
+                      {section.group}
+                    </p>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-black">{item.common_name}</p>
-
-                          <p className="mt-1 text-sm italic text-[#9CA8B8]">
-                            {item.scientific_name}
-                          </p>
-                        </div>
-
-                        <span className="rounded-full border border-[#0094FF]/30 bg-[#0094FF]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#7CC6FF]">
-                          {item.species_group}
-                        </span>
-                      </div>
-
-                      <p className="mt-3 flex items-center gap-2 text-sm text-[#9CA8B8]">
-                        <MapPin size={15} className="text-[#0094FF]" />
-                        {item.locality ||
-                          `${Number(item.latitude).toFixed(3)}, ${Number(
-                            item.longitude
-                          ).toFixed(3)}`}
-                      </p>
-
-                      <p className="mt-2 text-sm text-[#9CA8B8]">
-                        Observed: {formatDate(item.observed_at)}
-                      </p>
-
-                      {item.source_url && (
-                        <a
-                          href={item.source_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-4 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#0094FF]"
-                        >
-                          Data source <ExternalLink size={14} />
-                        </a>
-                      )}
-                    </div>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-[#7D8896]">
+                      {section.items.length}
+                    </p>
                   </div>
-                </GlassCard>
+
+                  <div className="grid gap-3">
+                    {section.items.map((item) => (
+                      <GlassCard key={item.id}>
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#1A2330] bg-[#10161E]">
+                            {item.species_group === "Whale" ||
+                            item.species_group === "Cetacean" ? (
+                              <Waves className="text-[#0094FF]" size={23} />
+                            ) : (
+                              <Fish className="text-[#0094FF]" size={23} />
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-black">
+                                  {item.common_name}
+                                </p>
+
+                                <p className="mt-1 text-sm italic text-[#9CA8B8]">
+                                  {item.scientific_name}
+                                </p>
+                              </div>
+
+                              <span className="rounded-full border border-[#0094FF]/30 bg-[#0094FF]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#7CC6FF]">
+                                {item.species_group}
+                              </span>
+                            </div>
+
+                            <p className="mt-3 flex items-center gap-2 text-sm text-[#9CA8B8]">
+                              <MapPin
+                                size={15}
+                                className="text-[#0094FF]"
+                              />
+                              {item.locality ||
+                                `${Number(item.latitude).toFixed(
+                                  3
+                                )}, ${Number(item.longitude).toFixed(3)}`}
+                            </p>
+
+                            <p className="mt-2 text-sm text-[#9CA8B8]">
+                              Observed: {formatDate(item.observed_at)}
+                            </p>
+
+                            {item.source_url && (
+                              <a
+                                href={item.source_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-4 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#0094FF]"
+                              >
+                                Data source <ExternalLink size={14} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </GlassCard>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
