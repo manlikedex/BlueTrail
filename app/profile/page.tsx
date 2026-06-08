@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
+  Award,
   Clock,
   Compass,
+  Edit3,
   LogOut,
   Mail,
   MapPin,
@@ -17,14 +19,12 @@ import {
 import AppScreen from "../../components/AppScreen";
 import AuthGuard from "../../components/AuthGuard";
 import GlassCard from "../../components/ui/GlassCard";
-import PrimaryButton from "../../components/ui/PrimaryButton";
 import { supabase } from "../../lib/supabase";
 
 type Profile = {
   id: string;
   full_name: string | null;
   username: string | null;
-  created_at?: string | null;
 };
 
 type DiveSession = {
@@ -32,10 +32,8 @@ type DiveSession = {
   title: string | null;
   location_name: string | null;
   started_at: string | null;
-  ended_at: string | null;
   duration_seconds: number | null;
   max_depth: number | null;
-  water_temp: number | null;
   visibility: number | null;
   status: string | null;
 };
@@ -59,10 +57,9 @@ export default function ProfilePage() {
 
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user) {
+    if (!user) {
       router.push("/login");
       return;
     }
@@ -72,7 +69,7 @@ export default function ProfilePage() {
 
     const { data: profileData } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id,full_name,username")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -81,7 +78,7 @@ export default function ProfilePage() {
     const { data: sessionData } = await supabase
       .from("dive_sessions")
       .select(
-        "id,title,location_name,started_at,ended_at,duration_seconds,max_depth,water_temp,visibility,status"
+        "id,title,location_name,started_at,duration_seconds,max_depth,visibility,status"
       )
       .eq("user_id", user.id)
       .order("started_at", { ascending: false })
@@ -127,19 +124,56 @@ export default function ProfilePage() {
     );
   }, [completedSessions]);
 
+  const achievements = [
+    {
+      title: "First Dive Logged",
+      description: "Complete your first dive session.",
+      unlocked: completedSessions.length >= 1,
+    },
+    {
+      title: "Five Dive Club",
+      description: "Log 5 completed dives.",
+      unlocked: completedSessions.length >= 5,
+    },
+    {
+      title: "Explorer",
+      description: "Log dives at 3 different locations.",
+      unlocked:
+        new Set(
+          completedSessions
+            .map((session) => session.location_name)
+            .filter(Boolean)
+        ).size >= 3,
+    },
+    {
+      title: "Depth Hunter",
+      description: "Record a dive deeper than 20m.",
+      unlocked: deepestDive >= 20,
+    },
+    {
+      title: "Clear Water",
+      description: "Record visibility of 10m or more.",
+      unlocked: completedSessions.some(
+        (session) => Number(session.visibility || 0) >= 10
+      ),
+    },
+    {
+      title: "Ocean Guardian",
+      description: "Use BlueTrail’s ocean protection hub.",
+      unlocked: false,
+    },
+  ];
+
   function formatDuration(seconds: number | null) {
     if (!seconds) return "00:00";
-
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
-
     if (hrs > 0) return `${hrs}h ${mins}m`;
     return `${mins}m`;
   }
 
   function formatDate(date: string | null) {
     if (!date) return "Unknown date";
-
     return new Date(date).toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "short",
@@ -168,7 +202,7 @@ export default function ProfilePage() {
               <User className="text-[#0094FF]" size={32} />
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-black uppercase tracking-[0.3em] text-[#0094FF]">
                 Profile
               </p>
@@ -183,32 +217,66 @@ export default function ProfilePage() {
               </p>
             </div>
           </div>
+
+          <Link
+            href="/profile/edit"
+            className="mt-5 flex items-center justify-center gap-2 rounded-xl border border-[#0094FF]/40 bg-[#0094FF] px-5 py-4 text-sm font-black uppercase tracking-[0.14em] text-white"
+          >
+            <Edit3 size={17} />
+            Edit Profile
+          </Link>
         </header>
 
         <section className="mt-4 grid grid-cols-2 gap-3">
-          <StatCard
-            icon={<Activity size={18} className="text-[#0094FF]" />}
-            label="Total Dives"
-            value={String(completedSessions.length)}
-          />
+          <StatCard icon={<Activity size={18} className="text-[#0094FF]" />} label="Total Dives" value={String(completedSessions.length)} />
+          <StatCard icon={<Clock size={18} className="text-[#0094FF]" />} label="Dive Time" value={formatDuration(totalSeconds)} />
+          <StatCard icon={<Waves size={18} className="text-[#0094FF]" />} label="Deepest" value={deepestDive ? `${deepestDive}m` : "--"} />
+          <StatCard icon={<Compass size={18} className="text-[#0094FF]" />} label="Avg Vis" value={averageVisibility ? `${averageVisibility}m` : "--"} />
+        </section>
 
-          <StatCard
-            icon={<Clock size={18} className="text-[#0094FF]" />}
-            label="Dive Time"
-            value={formatDuration(totalSeconds)}
-          />
+        <section className="mt-6">
+          <p className="mb-3 text-xs font-black uppercase tracking-[0.25em] text-[#0094FF]">
+            Achievements
+          </p>
 
-          <StatCard
-            icon={<Waves size={18} className="text-[#0094FF]" />}
-            label="Deepest"
-            value={deepestDive ? `${deepestDive}m` : "--"}
-          />
+          <div className="grid gap-3">
+            {achievements.map((achievement) => (
+              <GlassCard key={achievement.title}>
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+                      achievement.unlocked
+                        ? "border-[#0094FF]/50 bg-[#0094FF]/15"
+                        : "border-[#1A2330] bg-[#10161E]"
+                    }`}
+                  >
+                    <Award
+                      className={
+                        achievement.unlocked ? "text-[#0094FF]" : "text-[#4F5A66]"
+                      }
+                      size={22}
+                    />
+                  </div>
 
-          <StatCard
-            icon={<Compass size={18} className="text-[#0094FF]" />}
-            label="Avg Vis"
-            value={averageVisibility ? `${averageVisibility}m` : "--"}
-          />
+                  <div>
+                    <p className="font-black">{achievement.title}</p>
+                    <p className="mt-1 text-sm text-[#9CA8B8]">
+                      {achievement.description}
+                    </p>
+                    <p
+                      className={`mt-2 text-xs font-black uppercase tracking-[0.14em] ${
+                        achievement.unlocked
+                          ? "text-[#7CC6FF]"
+                          : "text-[#4F5A66]"
+                      }`}
+                    >
+                      {achievement.unlocked ? "Unlocked" : "Locked"}
+                    </p>
+                  </div>
+                </div>
+              </GlassCard>
+            ))}
+          </div>
         </section>
 
         <GlassCard className="mt-5">
@@ -220,9 +288,8 @@ export default function ProfilePage() {
             <div>
               <p className="text-xl font-black">BlueTrail Account</p>
               <p className="mt-2 text-sm leading-6 text-[#9CA8B8]">
-                Your profile is connected to your Supabase login. Dive sessions,
-                saved locations and future Trail Tag data will be linked to this
-                account.
+                Dive sessions, saved locations, achievements and future Trail
+                Tag data are linked to this account.
               </p>
             </div>
           </div>
@@ -248,56 +315,23 @@ export default function ProfilePage() {
               <p className="mt-2 text-sm leading-6 text-[#9CA8B8]">
                 Start your first manual dive session from the Track page.
               </p>
-
-              <Link
-                href="/track"
-                className="mt-5 block rounded-xl border border-[#0094FF]/40 bg-[#0094FF] px-5 py-4 text-center text-sm font-black uppercase tracking-[0.14em] text-white"
-              >
-                Start Tracking
-              </Link>
             </GlassCard>
           ) : (
             <div className="grid gap-3">
               {sessions.map((session) => (
                 <Link key={session.id} href={`/session/${session.id}`}>
                   <GlassCard>
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#1A2330] bg-[#10161E]">
-                        <Activity className="text-[#0094FF]" size={22} />
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-black">
-                              {session.title || "Untitled Dive"}
-                            </p>
-
-                            <p className="mt-1 flex items-center gap-1 text-sm text-[#9CA8B8]">
-                              <MapPin size={14} className="text-[#0094FF]" />
-                              {session.location_name || "Manual Location"}
-                            </p>
-                          </div>
-
-                          <span
-                            className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-black uppercase ${
-                              session.status === "completed"
-                                ? "bg-[#0094FF]/20 text-[#7CC6FF]"
-                                : "bg-yellow-400/20 text-[#F4D35E]"
-                            }`}
-                          >
-                            {session.status || "active"}
-                          </span>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-[#9CA8B8]">
-                          <p>{formatDate(session.started_at)}</p>
-                          <p>{formatDuration(session.duration_seconds)}</p>
-                          <p>
-                            {session.max_depth ? `${session.max_depth}m` : "--"}
-                          </p>
-                        </div>
-                      </div>
+                    <p className="font-black">
+                      {session.title || "Untitled Dive"}
+                    </p>
+                    <p className="mt-1 flex items-center gap-1 text-sm text-[#9CA8B8]">
+                      <MapPin size={14} className="text-[#0094FF]" />
+                      {session.location_name || "Manual Location"}
+                    </p>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-[#9CA8B8]">
+                      <p>{formatDate(session.started_at)}</p>
+                      <p>{formatDuration(session.duration_seconds)}</p>
+                      <p>{session.max_depth ? `${session.max_depth}m` : "--"}</p>
                     </div>
                   </GlassCard>
                 </Link>
@@ -340,7 +374,6 @@ function StatCard({
           {label}
         </p>
       </div>
-
       <p className="mt-3 text-2xl font-black">{value}</p>
     </GlassCard>
   );
