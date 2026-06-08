@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 
-const UK_WKT = "POLYGON((-11 49, 3 49, 3 61, -11 61, -11 49))";
+const UK_PLACE_ID = "6857";
 
 const species = [
   { commonName: "Blue Shark", scientificName: "Prionace glauca", group: "Shark" },
   { commonName: "Basking Shark", scientificName: "Cetorhinus maximus", group: "Shark" },
+  { commonName: "Ocean Sunfish", scientificName: "Mola mola", group: "Fish" },
   { commonName: "Minke Whale", scientificName: "Balaenoptera acutorostrata", group: "Whale" },
   { commonName: "Fin Whale", scientificName: "Balaenoptera physalus", group: "Whale" },
   { commonName: "Humpback Whale", scientificName: "Megaptera novaeangliae", group: "Whale" },
@@ -12,28 +13,28 @@ const species = [
   { commonName: "Common Dolphin", scientificName: "Delphinus delphis", group: "Cetacean" },
   { commonName: "Bottlenose Dolphin", scientificName: "Tursiops truncatus", group: "Cetacean" },
   { commonName: "Orca", scientificName: "Orcinus orca", group: "Cetacean" },
+  { commonName: "Grey Seal", scientificName: "Halichoerus grypus", group: "Seal" },
+  { commonName: "Common Seal", scientificName: "Phoca vitulina", group: "Seal" },
+  { commonName: "Leatherback Turtle", scientificName: "Dermochelys coriacea", group: "Turtle" },
 ];
 
 export async function GET() {
   const allSightings = [];
-  const debug: {
-    species: string;
-    status?: number;
-    count?: number;
-    url?: string;
-    error?: string;
-  }[] = [];
+  const debug = [];
 
   for (const item of species) {
     try {
-      const url = new URL("https://api.obis.org/v3/occurrence");
+      const url = new URL("https://api.inaturalist.org/v1/observations");
 
-      url.searchParams.set("scientificname", item.scientificName);
-      url.searchParams.set("geometry", UK_WKT);
-      url.searchParams.set("size", "50");
+      url.searchParams.set("place_id", UK_PLACE_ID);
+      url.searchParams.set("taxon_name", item.scientificName);
+      url.searchParams.set("order_by", "observed_on");
+      url.searchParams.set("order", "desc");
+      url.searchParams.set("per_page", "30");
+      url.searchParams.set("quality_grade", "research,needs_id");
 
       const res = await fetch(url.toString(), {
-        cache: "no-store",
+        next: { revalidate: 60 * 30 },
       });
 
       const data = await res.json();
@@ -43,34 +44,42 @@ export async function GET() {
         species: item.commonName,
         status: res.status,
         count: results.length,
-        url: url.toString(),
       });
 
       for (const record of results) {
-        const lat = record.decimalLatitude ?? record.decimallatitude;
-        const lon = record.decimalLongitude ?? record.decimallongitude;
+        const coords = record.geojson?.coordinates;
 
-        if (lat == null || lon == null) continue;
+        if (!coords || coords.length < 2) continue;
+
+        const lon = Number(coords[0]);
+        const lat = Number(coords[1]);
+
+        if (!lat || !lon) continue;
 
         allSightings.push({
-          id: `${item.scientificName}-${
-            record.id ||
-            record.occurrenceID ||
-            record.eventID ||
-            `${lat}-${lon}`
-          }`,
-          common_name: item.commonName,
-          scientific_name: item.scientificName,
+          id: `inat-${record.id}`,
+          common_name:
+            record.taxon?.preferred_common_name ||
+            item.commonName,
+          scientific_name:
+            record.taxon?.name ||
+            item.scientificName,
           species_group: item.group,
-          latitude: Number(lat),
-          longitude: Number(lon),
-          observed_at: record.eventDate || record.date_year || null,
+          latitude: lat,
+          longitude: lon,
+          observed_at:
+            record.observed_on ||
+            record.time_observed_at ||
+            record.created_at ||
+            null,
           locality:
-            record.locality ||
-            record.locationID ||
-            `${Number(lat).toFixed(3)}, ${Number(lon).toFixed(3)}`,
-          source: "OBIS",
-          source_url: "https://obis.org",
+            record.place_guess ||
+            `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
+          source: "iNaturalist",
+          source_url: record.uri || "https://www.inaturalist.org",
+          image_url:
+            record.photos?.[0]?.url?.replace("square", "medium") ||
+            null,
         });
       }
     } catch {
@@ -81,7 +90,14 @@ export async function GET() {
     }
   }
 
+  allSightings.sort((a, b) => {
+    const aTime = a.observed_at ? new Date(a.observed_at).getTime() : 0;
+    const bTime = b.observed_at ? new Date(b.observed_at).getTime() : 0;
+    return bTime - aTime;
+  });
+
   return NextResponse.json({
+    source: "iNaturalist",
     count: allSightings.length,
     sightings: allSightings,
     debug,
