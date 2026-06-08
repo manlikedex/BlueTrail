@@ -1,29 +1,93 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Activity, MapPin, Square, Waves } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { Activity, MapPin, Square, Waves, WifiOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import GlassCard from "./ui/GlassCard";
 import PrimaryButton from "./ui/PrimaryButton";
-import dynamic from "next/dynamic";
 import type { RoutePoint } from "./DiveRouteMap";
 
 const DiveRouteMap = dynamic(() => import("./DiveRouteMap"), {
   ssr: false,
 });
 
+const OFFLINE_ROUTE_KEY = "bluetrail_offline_route_points";
+
+type OfflineRoutePoint = {
+  session_id: number;
+  user_id: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  recorded_at: string;
+};
+
+function getOfflinePoints(): OfflineRoutePoint[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return JSON.parse(localStorage.getItem(OFFLINE_ROUTE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveOfflinePoint(point: OfflineRoutePoint) {
+  const current = getOfflinePoints();
+
+  localStorage.setItem(OFFLINE_ROUTE_KEY, JSON.stringify([...current, point]));
+}
+
+async function syncOfflinePoints() {
+  const points = getOfflinePoints();
+
+  if (points.length === 0) return;
+
+  const { error } = await supabase.from("dive_route_points").insert(points);
+
+  if (!error) {
+    localStorage.removeItem(OFFLINE_ROUTE_KEY);
+  }
+}
+
+function getDistanceMetres(a: RoutePoint, b: RoutePoint) {
+  const earthRadius = 6371000;
+
+  const lat1 = (Number(a.latitude) * Math.PI) / 180;
+  const lat2 = (Number(b.latitude) * Math.PI) / 180;
+  const deltaLat = ((Number(b.latitude) - Number(a.latitude)) * Math.PI) / 180;
+  const deltaLon =
+    ((Number(b.longitude) - Number(a.longitude)) * Math.PI) / 180;
+
+  const value =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2);
+
+  const angle = 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+
+  return earthRadius * angle;
+}
+
 export default function DiveTracker() {
   const router = useRouter();
 
   const watchIdRef = useRef<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedPointRef = useRef<RoutePoint | null>(null);
+  const lastSavedAtRef = useRef<number>(0);
 
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [tracking, setTracking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [isOnline, setIsOnline] = useState(true);
 
   const [locationName, setLocationName] = useState("");
   const [maxDepth, setMaxDepth] = useState("");
@@ -32,7 +96,32 @@ export default function DiveTracker() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
+    setOfflineCount(getOfflinePoints().length);
+    setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+    syncOfflinePoints().then(() => {
+      setOfflineCount(getOfflinePoints().length);
+    });
+
+    function handleOnline() {
+      setIsOnline(true);
+
+      syncOfflinePoints().then(() => {
+        setOfflineCount(getOfflinePoints().length);
+      });
+    }
+
+    function handleOffline() {
+      setIsOnline(false);
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
     return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
@@ -82,6 +171,8 @@ export default function DiveTracker() {
     setTracking(true);
     setSeconds(0);
     setRoutePoints([]);
+    lastSavedPointRef.current = null;
+    lastSavedAtRef.current = 0;
 
     timerRef.current = setInterval(() => {
       setSeconds((value) => value + 1);
@@ -95,23 +186,53 @@ export default function DiveTracker() {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       async (position) => {
-        const point = {
+        const point: RoutePoint = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
           recorded_at: new Date().toISOString(),
         };
 
+        const nowMs = Date.now();
+        const lastPoint = lastSavedPointRef.current;
+        const lastSavedAt = lastSavedAtRef.current;
+
+        const movedEnough = lastPoint
+          ? getDistanceMetres(lastPoint, point) >= 5
+          : true;
+
+        const waitedEnough = nowMs - lastSavedAt >= 10000;
+
+        if (!movedEnough && !waitedEnough) return;
+
+        lastSavedPointRef.current = point;
+        lastSavedAtRef.current = nowMs;
+
         setRoutePoints((current) => [...current, point]);
 
-        await supabase.from("dive_route_points").insert({
+        const routePayload: OfflineRoutePoint = {
           session_id: data.id,
           user_id: user.id,
           latitude: point.latitude,
           longitude: point.longitude,
-          accuracy: point.accuracy,
-          recorded_at: point.recorded_at,
-        });
+          accuracy: point.accuracy ?? null,
+          recorded_at: point.recorded_at || new Date().toISOString(),
+        };
+
+        if (!navigator.onLine) {
+          saveOfflinePoint(routePayload);
+          setOfflineCount(getOfflinePoints().length);
+          return;
+        }
+
+        const { error: pointError } = await supabase
+          .from("dive_route_points")
+          .insert(routePayload);
+
+        if (pointError) {
+          saveOfflinePoint(routePayload);
+          setOfflineCount(getOfflinePoints().length);
+        }
       },
       () => {
         alert("Could not access GPS. Please allow location permission.");
@@ -140,6 +261,9 @@ export default function DiveTracker() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+
+    await syncOfflinePoints();
+    setOfflineCount(getOfflinePoints().length);
 
     const now = new Date().toISOString();
 
@@ -189,9 +313,26 @@ export default function DiveTracker() {
 
         <p className="mt-3 text-sm leading-6 text-[#9CA8B8]">
           Start a dive, record your GPS route, then add depth, temperature,
-          visibility and notes when you finish.
+          visibility and notes when you finish. Offline GPS points will sync
+          automatically when you come back online.
         </p>
       </GlassCard>
+
+      {offlineCount > 0 && (
+        <GlassCard className="mt-5">
+          <div className="flex items-start gap-3">
+            <WifiOff className="mt-1 text-[#0094FF]" size={22} />
+
+            <div>
+              <p className="font-black">Offline route points saved</p>
+              <p className="mt-1 text-sm leading-6 text-[#9CA8B8]">
+                {offlineCount} GPS point{offlineCount === 1 ? "" : "s"} waiting
+                to sync when your connection returns.
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+      )}
 
       <section className="mt-5 grid grid-cols-3 gap-3">
         <GlassCard>
@@ -199,9 +340,7 @@ export default function DiveTracker() {
           <p className="mt-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#7D8896]">
             Duration
           </p>
-          <p className="mt-1 text-xl font-black">
-            {formatDuration(seconds)}
-          </p>
+          <p className="mt-1 text-xl font-black">{formatDuration(seconds)}</p>
         </GlassCard>
 
         <GlassCard>
@@ -218,7 +357,7 @@ export default function DiveTracker() {
             Status
           </p>
           <p className="mt-1 text-xl font-black">
-            {tracking ? "Live" : "Ready"}
+            {tracking ? (isOnline ? "Live" : "Offline") : "Ready"}
           </p>
         </GlassCard>
       </section>

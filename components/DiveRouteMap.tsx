@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import {
+  CircleMarker,
   MapContainer,
-  Marker,
   Polyline,
   Popup,
   TileLayer,
@@ -77,15 +77,33 @@ export default function DiveRouteMap({ points }: { points: RoutePoint[] }) {
           )}
 
           {start && (
-            <Marker position={[Number(start.latitude), Number(start.longitude)]}>
+            <CircleMarker
+              center={[Number(start.latitude), Number(start.longitude)]}
+              radius={8}
+              pathOptions={{
+                color: "#FFFFFF",
+                weight: 2,
+                fillColor: "#22C55E",
+                fillOpacity: 1,
+              }}
+            >
               <Popup>Start point</Popup>
-            </Marker>
+            </CircleMarker>
           )}
 
           {end && points.length > 1 && (
-            <Marker position={[Number(end.latitude), Number(end.longitude)]}>
+            <CircleMarker
+              center={[Number(end.latitude), Number(end.longitude)]}
+              radius={8}
+              pathOptions={{
+                color: "#FFFFFF",
+                weight: 2,
+                fillColor: "#EF4444",
+                fillOpacity: 1,
+              }}
+            >
               <Popup>End point</Popup>
-            </Marker>
+            </CircleMarker>
           )}
         </MapContainer>
 
