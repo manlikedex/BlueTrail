@@ -6,18 +6,28 @@ const species = [
   { commonName: "Blue Shark", scientificName: "Prionace glauca", group: "Shark" },
   { commonName: "Basking Shark", scientificName: "Cetorhinus maximus", group: "Shark" },
   { commonName: "Minke Whale", scientificName: "Balaenoptera acutorostrata", group: "Whale" },
+  { commonName: "Fin Whale", scientificName: "Balaenoptera physalus", group: "Whale" },
+  { commonName: "Humpback Whale", scientificName: "Megaptera novaeangliae", group: "Whale" },
   { commonName: "Harbour Porpoise", scientificName: "Phocoena phocoena", group: "Cetacean" },
   { commonName: "Common Dolphin", scientificName: "Delphinus delphis", group: "Cetacean" },
   { commonName: "Bottlenose Dolphin", scientificName: "Tursiops truncatus", group: "Cetacean" },
+  { commonName: "Orca", scientificName: "Orcinus orca", group: "Cetacean" },
 ];
 
 export async function GET() {
   const allSightings = [];
-  const debug: any[] = [];
+  const debug: {
+    species: string;
+    status?: number;
+    count?: number;
+    url?: string;
+    error?: string;
+  }[] = [];
 
   for (const item of species) {
     try {
       const url = new URL("https://api.obis.org/v3/occurrence");
+
       url.searchParams.set("scientificname", item.scientificName);
       url.searchParams.set("geometry", UK_WKT);
       url.searchParams.set("size", "50");
@@ -43,7 +53,12 @@ export async function GET() {
         if (lat == null || lon == null) continue;
 
         allSightings.push({
-          id: `${item.scientificName}-${record.id || record.occurrenceID || `${lat}-${lon}`}`,
+          id: `${item.scientificName}-${
+            record.id ||
+            record.occurrenceID ||
+            record.eventID ||
+            `${lat}-${lon}`
+          }`,
           common_name: item.commonName,
           scientific_name: item.scientificName,
           species_group: item.group,
@@ -58,7 +73,7 @@ export async function GET() {
           source_url: "https://obis.org",
         });
       }
-    } catch (error) {
+    } catch {
       debug.push({
         species: item.commonName,
         error: "Fetch failed",
