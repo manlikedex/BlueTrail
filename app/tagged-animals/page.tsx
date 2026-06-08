@@ -18,12 +18,10 @@ import type { MarineSighting } from "../../components/TaggedAnimalMap";
 
 const TaggedAnimalMap = dynamic(
   () => import("../../components/TaggedAnimalMap"),
-  {
-    ssr: false,
-  }
+  { ssr: false }
 );
 
-const groups = ["All", "Shark", "Whale", "Cetacean"];
+const groups = ["All", "Shark", "Whale", "Cetacean", "Seal", "Turtle"];
 
 export default function TaggedAnimalsPage() {
   const [sightings, setSightings] = useState<MarineSighting[]>([]);
@@ -44,7 +42,6 @@ export default function TaggedAnimalsPage() {
       });
 
       const data = await res.json();
-
       setSightings(Array.isArray(data.sightings) ? data.sightings : []);
     } catch {
       setSightings([]);
@@ -64,7 +61,8 @@ export default function TaggedAnimalsPage() {
         !search ||
         item.common_name.toLowerCase().includes(search) ||
         item.scientific_name.toLowerCase().includes(search) ||
-        item.locality?.toLowerCase().includes(search);
+        item.locality?.toLowerCase().includes(search) ||
+        item.source?.toLowerCase().includes(search);
 
       return matchesGroup && matchesSearch;
     });
@@ -75,9 +73,7 @@ export default function TaggedAnimalsPage() {
       .filter((group) => group !== "All")
       .map((group) => ({
         group,
-        items: filteredSightings.filter(
-          (item) => item.species_group === group
-        ),
+        items: filteredSightings.filter((item) => item.species_group === group),
       }))
       .filter((section) => section.items.length > 0);
   }, [filteredSightings]);
@@ -105,13 +101,12 @@ export default function TaggedAnimalsPage() {
           </p>
 
           <h1 className="mt-3 text-5xl font-black tracking-tight">
-            Real UK occurrence data.
+            UK marine sighting layer.
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-[#9CA8B8]">
-            View real marine animal occurrence records around UK waters using
-            trusted biodiversity data. This is sightings and occurrence data,
-            not live GPS tracking.
+            View a marine-only sightings layer for sharks, whales, dolphins,
+            porpoises, seals and turtles. Sources are shown on each map marker.
           </p>
         </header>
 
@@ -136,9 +131,11 @@ export default function TaggedAnimalsPage() {
 
           <GlassCard>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#7D8896]">
-              Source
+              Layer
             </p>
-            <p className="mt-2 text-lg font-black text-[#0094FF]">OBIS</p>
+            <p className="mt-2 text-lg font-black text-[#0094FF]">
+              UK
+            </p>
           </GlassCard>
         </section>
 
@@ -149,13 +146,12 @@ export default function TaggedAnimalsPage() {
             </div>
 
             <div>
-              <p className="text-xl font-black">Layer 1: Real sightings</p>
+              <p className="text-xl font-black">Marine-only</p>
 
               <p className="mt-2 text-sm leading-6 text-[#9CA8B8]">
-                BlueTrail pulls real marine occurrence records for sharks,
-                whales, dolphins and porpoises around the UK. These records can
-                help show where species have been observed historically or
-                recently.
+                This uses a controlled UK marine layer with selected trusted
+                source links, plus recent iNaturalist marine observations where
+                suitable. No moths or land animals are included.
               </p>
             </div>
           </div>
@@ -167,7 +163,7 @@ export default function TaggedAnimalsPage() {
 
             <input
               className="w-full bg-transparent text-white outline-none placeholder:text-[#6F7A89]"
-              placeholder="Search shark, dolphin, whale..."
+              placeholder="Search shark, dolphin, whale, seal..."
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -234,45 +230,41 @@ export default function TaggedAnimalsPage() {
                     {section.items.map((item) => (
                       <GlassCard key={item.id}>
                         <div className="flex items-start gap-4">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#1A2330] bg-[#10161E]">
-                            {item.species_group === "Whale" ||
-                            item.species_group === "Cetacean" ? (
-                              <Waves className="text-[#0094FF]" size={23} />
-                            ) : (
-                              <Fish className="text-[#0094FF]" size={23} />
-                            )}
-                          </div>
+                          {item.image_url ? (
+                            <img
+                              src={item.image_url}
+                              alt={item.common_name}
+                              className="h-16 w-16 shrink-0 rounded-xl object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#1A2330] bg-[#10161E]">
+                              {item.species_group === "Whale" ||
+                              item.species_group === "Cetacean" ? (
+                                <Waves className="text-[#0094FF]" size={23} />
+                              ) : (
+                                <Fish className="text-[#0094FF]" size={23} />
+                              )}
+                            </div>
+                          )}
 
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="font-black">
-                                  {item.common_name}
-                                </p>
+                            <p className="font-black">{item.common_name}</p>
 
-                                <p className="mt-1 text-sm italic text-[#9CA8B8]">
-                                  {item.scientific_name}
-                                </p>
-                              </div>
-
-                              <span className="rounded-full border border-[#0094FF]/30 bg-[#0094FF]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#7CC6FF]">
-                                {item.species_group}
-                              </span>
-                            </div>
+                            <p className="mt-1 text-sm italic text-[#9CA8B8]">
+                              {item.scientific_name}
+                            </p>
 
                             <p className="mt-3 flex items-center gap-2 text-sm text-[#9CA8B8]">
-                              <MapPin
-                                size={15}
-                                className="text-[#0094FF]"
-                              />
-                              {item.locality ||
-                                `${Number(item.latitude).toFixed(
-                                  3
-                                )}, ${Number(item.longitude).toFixed(3)}`}
+                              <MapPin size={15} className="text-[#0094FF]" />
+                              {item.locality}
                             </p>
 
                             <p className="mt-2 text-sm text-[#9CA8B8]">
                               Observed: {formatDate(item.observed_at)}
+                            </p>
+
+                            <p className="mt-2 text-sm text-[#9CA8B8]">
+                              Source: {item.source}
                             </p>
 
                             {item.source_url && (
@@ -282,7 +274,7 @@ export default function TaggedAnimalsPage() {
                                 rel="noreferrer"
                                 className="mt-4 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#0094FF]"
                               >
-                                Data source <ExternalLink size={14} />
+                                View source <ExternalLink size={14} />
                               </a>
                             )}
                           </div>

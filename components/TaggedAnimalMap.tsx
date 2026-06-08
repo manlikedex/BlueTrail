@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect } from "react";
 import {
   CircleMarker,
   MapContainer,
@@ -21,6 +21,7 @@ export type MarineSighting = {
   locality: string | null;
   source: string | null;
   source_url: string | null;
+  image_url?: string | null;
 };
 
 function markerColour(group: string) {
@@ -29,7 +30,8 @@ function markerColour(group: string) {
   if (value.includes("shark")) return "#EF4444";
   if (value.includes("whale")) return "#22D3EE";
   if (value.includes("cetacean")) return "#A78BFA";
-
+  if (value.includes("seal")) return "#38BDF8";
+  if (value.includes("turtle")) return "#34D399";
   return "#0094FF";
 }
 
@@ -43,22 +45,22 @@ function formatDate(date: string | null) {
   });
 }
 
-function FitBounds({ sightings }: { sightings: MarineSighting[] }) {
+function FitBounds({ animals }: { animals: MarineSighting[] }) {
   const map = useMap();
 
-  useMemo(() => {
-    if (sightings.length === 0) return;
+  useEffect(() => {
+    if (animals.length === 0) return;
 
-    const bounds = sightings.map((item) => [
+    const bounds = animals.map((item) => [
       Number(item.latitude),
       Number(item.longitude),
     ]) as [number, number][];
 
     map.fitBounds(bounds, {
-      padding: [35, 35],
+      padding: [40, 40],
       maxZoom: 8,
     });
-  }, [map, sightings]);
+  }, [map, animals]);
 
   return null;
 }
@@ -70,7 +72,7 @@ export default function TaggedAnimalMap({
 }) {
   return (
     <div className="mt-6 overflow-hidden rounded-3xl border border-[#1A2330] bg-[#05070A]">
-      <div className="relative h-[520px]">
+      <div className="relative h-[540px]">
         <MapContainer
           center={[55.3, -4.5]}
           zoom={5}
@@ -83,7 +85,7 @@ export default function TaggedAnimalMap({
             subdomains={["a", "b", "c", "d"]}
           />
 
-          <FitBounds sightings={animals} />
+          <FitBounds animals={animals} />
 
           {animals.map((animal) => {
             const colour = markerColour(animal.species_group);
@@ -92,16 +94,30 @@ export default function TaggedAnimalMap({
               <CircleMarker
                 key={animal.id}
                 center={[Number(animal.latitude), Number(animal.longitude)]}
-                radius={7}
+                radius={8}
                 pathOptions={{
                   color: "#FFFFFF",
                   weight: 1,
                   fillColor: colour,
-                  fillOpacity: 0.85,
+                  fillOpacity: 0.9,
                 }}
               >
                 <Popup>
-                  <div style={{ minWidth: 180 }}>
+                  <div style={{ minWidth: 230 }}>
+                    {animal.image_url && (
+                      <img
+                        src={animal.image_url}
+                        alt={animal.common_name}
+                        style={{
+                          width: "100%",
+                          height: 120,
+                          objectFit: "cover",
+                          borderRadius: 10,
+                          marginBottom: 10,
+                        }}
+                      />
+                    )}
+
                     <p style={{ fontWeight: 800, margin: 0 }}>
                       {animal.common_name}
                     </p>
@@ -115,7 +131,7 @@ export default function TaggedAnimalMap({
                     </p>
 
                     <p style={{ margin: "6px 0" }}>
-                      {animal.locality || "UK waters"}
+                      Location: {animal.locality || "UK waters"}
                     </p>
 
                     <p style={{ margin: "6px 0" }}>
@@ -123,9 +139,25 @@ export default function TaggedAnimalMap({
                     </p>
 
                     <p style={{ margin: "6px 0" }}>
-                      {Number(animal.latitude).toFixed(3)},{" "}
-                      {Number(animal.longitude).toFixed(3)}
+                      Source: {animal.source || "Unknown"}
                     </p>
+
+                    {animal.source_url && (
+                      <a
+                        href={animal.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: "inline-block",
+                          marginTop: 8,
+                          color: "#0094FF",
+                          fontWeight: 800,
+                          textDecoration: "none",
+                        }}
+                      >
+                        View source →
+                      </a>
+                    )}
                   </div>
                 </Popup>
               </CircleMarker>
@@ -138,37 +170,18 @@ export default function TaggedAnimalMap({
             Interactive Map
           </p>
           <p className="mt-1 text-sm font-black text-white">
-            UK marine sightings
+            UK Marine Sightings
           </p>
-        </div>
-
-        <div className="pointer-events-none absolute bottom-4 left-4 z-[500] rounded-2xl border border-[#1A2330] bg-[#05070A]/90 p-3 backdrop-blur-xl">
-          <div className="grid gap-2 text-[11px]">
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-red-500" />
-              <span className="text-[#9CA8B8]">Sharks</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-cyan-400" />
-              <span className="text-[#9CA8B8]">Whales</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-purple-400" />
-              <span className="text-[#9CA8B8]">Dolphins / Porpoises</span>
-            </div>
-          </div>
         </div>
 
         {animals.length === 0 && (
           <div className="absolute inset-0 z-[600] flex items-center justify-center bg-[#05070A]/80 backdrop-blur-sm">
             <div className="rounded-2xl border border-[#1A2330] bg-[#05070A] p-6 text-center">
               <p className="text-lg font-black text-white">
-                No sightings loaded
+                No marine sightings loaded
               </p>
               <p className="mt-2 text-sm text-[#9CA8B8]">
-                Refresh marine sightings to load occurrence data.
+                Refresh sightings or try another filter.
               </p>
             </div>
           </div>

@@ -1,27 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import {
-  Activity,
-  CheckCircle,
-  Clock,
-  Eye,
-  MapPin,
-  Thermometer,
-  Waves,
-} from "lucide-react";
+import { useParams } from "next/navigation";
+import { Activity, MapPin, Thermometer, Waves } from "lucide-react";
 import AppScreen from "../../../components/AppScreen";
 import AuthGuard from "../../../components/AuthGuard";
 import GlassCard from "../../../components/ui/GlassCard";
-import PrimaryButton from "../../../components/ui/PrimaryButton";
 import { supabase } from "../../../lib/supabase";
+
+import dynamic from "next/dynamic";
+import type { RoutePoint } from "../../../components/DiveRouteMap";
+
+const DiveRouteMap = dynamic(
+  () => import("../../../components/DiveRouteMap"),
+  {
+    ssr: false,
+  }
+);
 
 type DiveSession = {
   id: number;
   title: string | null;
+  activity_type: string | null;
   location_name: string | null;
-  started_at: string;
+  start_time: string | null;
+  end_time: string | null;
+  started_at: string | null;
   ended_at: string | null;
   duration_seconds: number | null;
   max_depth: number | null;
@@ -31,18 +35,12 @@ type DiveSession = {
   status: string | null;
 };
 
-export default function SessionPage() {
+export default function SessionDetailPage() {
   const { id } = useParams();
-  const router = useRouter();
 
   const [session, setSession] = useState<DiveSession | null>(null);
+  const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ending, setEnding] = useState(false);
-
-  const [maxDepth, setMaxDepth] = useState("");
-  const [waterTemp, setWaterTemp] = useState("");
-  const [visibility, setVisibility] = useState("");
-  const [notes, setNotes] = useState("");
 
   useEffect(() => {
     loadSession();
@@ -51,88 +49,49 @@ export default function SessionPage() {
   async function loadSession() {
     setLoading(true);
 
-    const { data, error } = await supabase
+    const { data: sessionData } = await supabase
       .from("dive_sessions")
       .select("*")
       .eq("id", id)
       .single();
 
+    const { data: pointsData } = await supabase
+      .from("dive_route_points")
+      .select("id, latitude, longitude, accuracy, recorded_at")
+      .eq("session_id", id)
+      .order("recorded_at", { ascending: true });
+
+    setSession(sessionData || null);
+    setRoutePoints((pointsData as RoutePoint[]) || []);
     setLoading(false);
-
-    if (error || !data) {
-      alert("Dive session not found.");
-      return;
-    }
-
-    setSession(data);
-    setMaxDepth(data.max_depth?.toString() || "");
-    setWaterTemp(data.water_temp?.toString() || "");
-    setVisibility(data.visibility?.toString() || "");
-    setNotes(data.notes || "");
   }
 
-  function getLiveDuration() {
-    if (!session?.started_at) return "00:00:00";
+  function formatDuration(totalSeconds: number | null) {
+    if (!totalSeconds) return "-";
 
-    const start = new Date(session.started_at).getTime();
-    const end = session.ended_at
-      ? new Date(session.ended_at).getTime()
-      : Date.now();
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
 
-    const seconds = Math.max(0, Math.floor((end - start) / 1000));
-
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(
-      2,
-      "0"
-    )}:${String(secs).padStart(2, "0")}`;
+    return `${mins}m ${secs}s`;
   }
 
-  async function endSession() {
-    if (!session) return;
+  function formatDate(date: string | null) {
+    if (!date) return "-";
 
-    setEnding(true);
-
-    const startedAt = new Date(session.started_at).getTime();
-    const endedAt = new Date();
-    const durationSeconds = Math.max(
-      0,
-      Math.floor((endedAt.getTime() - startedAt) / 1000)
-    );
-
-    const { error } = await supabase
-      .from("dive_sessions")
-      .update({
-        ended_at: endedAt.toISOString(),
-        duration_seconds: durationSeconds,
-        max_depth: maxDepth ? Number(maxDepth) : null,
-        water_temp: waterTemp ? Number(waterTemp) : null,
-        visibility: visibility ? Number(visibility) : null,
-        notes: notes || null,
-        status: "completed",
-      })
-      .eq("id", session.id);
-
-    setEnding(false);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    router.push("/profile");
+    return new Date(date).toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   if (loading) {
     return (
       <AuthGuard>
         <AppScreen>
-          <GlassCard>
-            <p className="text-[#9CA8B8]">Loading dive session...</p>
-          </GlassCard>
+          <p className="text-[#9CA8B8]">Loading dive session...</p>
         </AppScreen>
       </AuthGuard>
     );
@@ -142,182 +101,95 @@ export default function SessionPage() {
     return (
       <AuthGuard>
         <AppScreen>
-          <GlassCard>
-            <h1 className="text-3xl font-black">Session not found</h1>
-          </GlassCard>
+          <h1 className="text-3xl font-black">Dive session not found</h1>
         </AppScreen>
       </AuthGuard>
     );
   }
-
-  const isCompleted = session.status === "completed";
 
   return (
     <AuthGuard>
       <AppScreen>
         <header>
           <p className="text-xs font-black uppercase tracking-[0.3em] text-[#0094FF]">
-            Dive Session
+            Dive Log
           </p>
 
           <h1 className="mt-3 text-5xl font-black tracking-tight">
-            {session.title || "Untitled Dive"}
+            {session.title || "Tracked Dive"}
           </h1>
 
-          <p className="mt-3 flex items-center gap-2 text-sm text-[#9CA8B8]">
-            <MapPin size={16} className="text-[#0094FF]" />
-            {session.location_name || "Location not set"}
+          <p className="mt-3 text-sm leading-6 text-[#9CA8B8]">
+            {session.location_name || "Unknown location"}
           </p>
         </header>
 
-        <GlassCard className="mt-6">
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-[#0094FF]">
-                Session Timer
-              </p>
-
-              <p className="mt-4 text-5xl font-black tracking-tight">
-                {getLiveDuration()}
-              </p>
-
-              <p className="mt-2 text-sm text-[#9CA8B8]">
-                {isCompleted ? "Completed session" : "Active manual tracking"}
-              </p>
-            </div>
-
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#1A2330] bg-[#10161E]">
-              {isCompleted ? (
-                <CheckCircle className="text-[#0094FF]" size={32} />
-              ) : (
-                <Activity className="text-[#0094FF]" size={32} />
-              )}
-            </div>
-          </div>
-        </GlassCard>
-
-        <section className="mt-4 grid grid-cols-2 gap-3">
-          <MetricInput
-            icon={<Waves size={18} className="text-[#0094FF]" />}
-            label="Max Depth"
-            value={maxDepth}
-            setValue={setMaxDepth}
-            placeholder="0"
-            suffix="m"
-            disabled={isCompleted}
-          />
-
-          <MetricInput
-            icon={<Thermometer size={18} className="text-[#0094FF]" />}
-            label="Water Temp"
-            value={waterTemp}
-            setValue={setWaterTemp}
-            placeholder="0"
-            suffix="°C"
-            disabled={isCompleted}
-          />
-
-          <MetricInput
-            icon={<Eye size={18} className="text-[#0094FF]" />}
-            label="Visibility"
-            value={visibility}
-            setValue={setVisibility}
-            placeholder="0"
-            suffix="m"
-            disabled={isCompleted}
-          />
+        <section className="mt-6 grid grid-cols-2 gap-3">
+          <GlassCard>
+            <Activity className="text-[#0094FF]" size={22} />
+            <p className="mt-3 text-xs text-[#9CA8B8]">Duration</p>
+            <p className="mt-1 text-xl font-black">
+              {formatDuration(session.duration_seconds)}
+            </p>
+          </GlassCard>
 
           <GlassCard>
-            <div className="flex items-center gap-2">
-              <Clock size={18} className="text-[#0094FF]" />
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#7D8896]">
-                Status
-              </p>
-            </div>
-
-            <p className="mt-3 text-xl font-black">
-              {isCompleted ? "Saved" : "Live"}
+            <Waves className="text-[#0094FF]" size={22} />
+            <p className="mt-3 text-xs text-[#9CA8B8]">Max Depth</p>
+            <p className="mt-1 text-xl font-black">
+              {session.max_depth ? `${session.max_depth}m` : "-"}
             </p>
+          </GlassCard>
+
+          <GlassCard>
+            <Thermometer className="text-[#0094FF]" size={22} />
+            <p className="mt-3 text-xs text-[#9CA8B8]">Water Temp</p>
+            <p className="mt-1 text-xl font-black">
+              {session.water_temp ? `${session.water_temp}°C` : "-"}
+            </p>
+          </GlassCard>
+
+          <GlassCard>
+            <MapPin className="text-[#0094FF]" size={22} />
+            <p className="mt-3 text-xs text-[#9CA8B8]">Route Points</p>
+            <p className="mt-1 text-xl font-black">{routePoints.length}</p>
           </GlassCard>
         </section>
 
-        <GlassCard className="mt-4">
+        <GlassCard className="mt-5">
           <p className="text-xs font-black uppercase tracking-[0.25em] text-[#0094FF]">
-            Dive Notes
+            Session Times
           </p>
 
-          <textarea
-            className="mt-4 min-h-[140px] w-full rounded-xl border border-[#1A2330] bg-[#05070A] p-4 text-white outline-none placeholder:text-[#6F7A89]"
-            placeholder="Visibility, marine life, conditions, entry/exit notes..."
-            value={notes}
-            disabled={isCompleted}
-            onChange={(e) => setNotes(e.target.value)}
-          />
+          <p className="mt-3 text-sm text-[#9CA8B8]">
+            Started: {formatDate(session.start_time || session.started_at)}
+          </p>
+
+          <p className="mt-2 text-sm text-[#9CA8B8]">
+            Ended: {formatDate(session.end_time || session.ended_at)}
+          </p>
         </GlassCard>
 
-        {!isCompleted && (
-          <div className="mt-6">
-            <PrimaryButton
-              onClick={endSession}
-              disabled={ending}
-              className="w-full border-red-400/40 bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.25)]"
-            >
-              {ending ? "Saving Session..." : "End Session"}
-            </PrimaryButton>
-          </div>
-        )}
+        <section className="mt-6">
+          <p className="mb-3 text-xs font-black uppercase tracking-[0.25em] text-[#0094FF]">
+            GPS Route
+          </p>
 
-        {isCompleted && (
-          <GlassCard className="mt-6">
-            <p className="font-black text-[#0094FF]">Session saved</p>
-            <p className="mt-2 text-sm leading-6 text-[#9CA8B8]">
-              This dive has been logged. Future Trail Tag integration will sync
-              depth, temperature and route data automatically.
+          <DiveRouteMap points={routePoints} />
+        </section>
+
+        {session.notes && (
+          <GlassCard className="mt-5">
+            <p className="text-xs font-black uppercase tracking-[0.25em] text-[#0094FF]">
+              Notes
+            </p>
+
+            <p className="mt-3 text-sm leading-6 text-[#9CA8B8]">
+              {session.notes}
             </p>
           </GlassCard>
         )}
       </AppScreen>
     </AuthGuard>
-  );
-}
-
-function MetricInput({
-  icon,
-  label,
-  value,
-  setValue,
-  placeholder,
-  suffix,
-  disabled,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  setValue: (value: string) => void;
-  placeholder: string;
-  suffix: string;
-  disabled: boolean;
-}) {
-  return (
-    <GlassCard>
-      <div className="flex items-center gap-2">
-        {icon}
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#7D8896]">
-          {label}
-        </p>
-      </div>
-
-      <div className="mt-3 flex items-end gap-1">
-        <input
-          className="w-full bg-transparent text-3xl font-black text-white outline-none placeholder:text-[#6F7A89]"
-          value={value}
-          disabled={disabled}
-          placeholder={placeholder}
-          inputMode="decimal"
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <p className="mb-1 text-sm font-black text-[#9CA8B8]">{suffix}</p>
-      </div>
-    </GlassCard>
   );
 }
