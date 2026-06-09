@@ -28,6 +28,11 @@ const menuItems = [
     label: "Explore",
   },
   {
+    href: "/communtiy",
+    icon: Compass,
+    label: "Social",
+  },
+  {
     href: "/map",
     icon: Map,
     label: "Map",

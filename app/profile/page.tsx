@@ -24,7 +24,11 @@ import { supabase } from "../../lib/supabase";
 type Profile = {
   id: string;
   full_name: string | null;
+  display_name: string | null;
   username: string | null;
+  bio: string | null;
+  location: string | null;
+  avatar_url: string | null;
 };
 
 type DiveSession = {
@@ -69,7 +73,7 @@ export default function ProfilePage() {
 
     const { data: profileData } = await supabase
       .from("profiles")
-      .select("id,full_name,username")
+      .select("id,full_name,display_name,username,bio,location,avatar_url")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -96,7 +100,11 @@ export default function ProfilePage() {
   }
 
   const displayName =
-    profile?.full_name || profile?.username || email.split("@")[0] || "Explorer";
+    profile?.display_name ||
+    profile?.full_name ||
+    profile?.username ||
+    email.split("@")[0] ||
+    "Explorer";
 
   const completedSessions = sessions.filter(
     (session) => session.status === "completed"
@@ -166,14 +174,18 @@ export default function ProfilePage() {
 
   function formatDuration(seconds: number | null) {
     if (!seconds) return "00:00";
+
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
+
     if (hrs > 0) return `${hrs}h ${mins}m`;
+
     return `${mins}m`;
   }
 
   function formatDate(date: string | null) {
     if (!date) return "Unknown date";
+
     return new Date(date).toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "short",
@@ -198,9 +210,17 @@ export default function ProfilePage() {
       <AppScreen>
         <header className="rounded-3xl border border-[#1A2330] bg-[#0B0F14] p-5">
           <div className="flex items-start gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-[#1A2330] bg-[#10161E]">
-              <User className="text-[#0094FF]" size={32} />
-            </div>
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={displayName}
+                className="h-16 w-16 shrink-0 rounded-2xl border border-[#1A2330] object-cover"
+              />
+            ) : (
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-[#1A2330] bg-[#10161E]">
+                <User className="text-[#0094FF]" size={32} />
+              </div>
+            )}
 
             <div className="min-w-0 flex-1">
               <p className="text-xs font-black uppercase tracking-[0.3em] text-[#0094FF]">
@@ -211,10 +231,29 @@ export default function ProfilePage() {
                 {displayName}
               </h1>
 
+              {profile?.username && (
+                <p className="mt-2 text-sm font-black text-[#0094FF]">
+                  @{profile.username}
+                </p>
+              )}
+
               <p className="mt-2 flex items-center gap-2 text-sm text-[#9CA8B8]">
                 <Mail size={15} className="text-[#0094FF]" />
                 {email}
               </p>
+
+              {profile?.location && (
+                <p className="mt-2 flex items-center gap-2 text-sm text-[#9CA8B8]">
+                  <MapPin size={15} className="text-[#0094FF]" />
+                  {profile.location}
+                </p>
+              )}
+
+              {profile?.bio && (
+                <p className="mt-3 text-sm leading-6 text-[#9CA8B8]">
+                  {profile.bio}
+                </p>
+              )}
             </div>
           </div>
 
@@ -228,10 +267,26 @@ export default function ProfilePage() {
         </header>
 
         <section className="mt-4 grid grid-cols-2 gap-3">
-          <StatCard icon={<Activity size={18} className="text-[#0094FF]" />} label="Total Dives" value={String(completedSessions.length)} />
-          <StatCard icon={<Clock size={18} className="text-[#0094FF]" />} label="Dive Time" value={formatDuration(totalSeconds)} />
-          <StatCard icon={<Waves size={18} className="text-[#0094FF]" />} label="Deepest" value={deepestDive ? `${deepestDive}m` : "--"} />
-          <StatCard icon={<Compass size={18} className="text-[#0094FF]" />} label="Avg Vis" value={averageVisibility ? `${averageVisibility}m` : "--"} />
+          <StatCard
+            icon={<Activity size={18} className="text-[#0094FF]" />}
+            label="Total Dives"
+            value={String(completedSessions.length)}
+          />
+          <StatCard
+            icon={<Clock size={18} className="text-[#0094FF]" />}
+            label="Dive Time"
+            value={formatDuration(totalSeconds)}
+          />
+          <StatCard
+            icon={<Waves size={18} className="text-[#0094FF]" />}
+            label="Deepest"
+            value={deepestDive ? `${deepestDive}m` : "--"}
+          />
+          <StatCard
+            icon={<Compass size={18} className="text-[#0094FF]" />}
+            label="Avg Vis"
+            value={averageVisibility ? `${averageVisibility}m` : "--"}
+          />
         </section>
 
         <section className="mt-6">
@@ -252,7 +307,9 @@ export default function ProfilePage() {
                   >
                     <Award
                       className={
-                        achievement.unlocked ? "text-[#0094FF]" : "text-[#4F5A66]"
+                        achievement.unlocked
+                          ? "text-[#0094FF]"
+                          : "text-[#4F5A66]"
                       }
                       size={22}
                     />
@@ -288,8 +345,8 @@ export default function ProfilePage() {
             <div>
               <p className="text-xl font-black">BlueTrail Account</p>
               <p className="mt-2 text-sm leading-6 text-[#9CA8B8]">
-                Dive sessions, saved locations, achievements and future Trail
-                Tag data are linked to this account.
+                Dive sessions, saved locations, achievements, social features
+                and future Trail Tag data are linked to this account.
               </p>
             </div>
           </div>
@@ -331,7 +388,9 @@ export default function ProfilePage() {
                     <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-[#9CA8B8]">
                       <p>{formatDate(session.started_at)}</p>
                       <p>{formatDuration(session.duration_seconds)}</p>
-                      <p>{session.max_depth ? `${session.max_depth}m` : "--"}</p>
+                      <p>
+                        {session.max_depth ? `${session.max_depth}m` : "--"}
+                      </p>
                     </div>
                   </GlassCard>
                 </Link>
