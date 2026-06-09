@@ -94,70 +94,72 @@ if (!open || !file || !preview) return null;
     ctx.putImageData(imageData, 0, 0);
   }
 
-  async function saveEditedStory() {
-    if (file.type.startsWith("video")) {
-      onSave(file);
-      return;
-    }
+ async function saveEditedStory() {
+  if (!file) return;
 
-    const image = imageRef.current;
-    if (!image) return;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = 1080;
-    canvas.height = 1920;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const imageRatio = image.naturalWidth / image.naturalHeight;
-    const canvasRatio = canvas.width / canvas.height;
-
-    let drawWidth = canvas.width;
-    let drawHeight = canvas.height;
-    let drawX = 0;
-    let drawY = 0;
-
-    if (imageRatio > canvasRatio) {
-      drawHeight = canvas.height;
-      drawWidth = drawHeight * imageRatio;
-      drawX = (canvas.width - drawWidth) / 2;
-    } else {
-      drawWidth = canvas.width;
-      drawHeight = drawWidth / imageRatio;
-      drawY = (canvas.height - drawHeight) / 2;
-    }
-
-    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
-    applyFilterToCanvas(ctx, canvas.width, canvas.height);
-
-    if (text.trim()) {
-      ctx.font = `900 ${textSize * 2}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.lineWidth = 8;
-      ctx.strokeStyle = "rgba(0,0,0,0.55)";
-      ctx.fillStyle = "white";
-
-      const x = (textX / 100) * canvas.width;
-      const y = (textY / 100) * canvas.height;
-
-      ctx.strokeText(text, x, y);
-      ctx.fillText(text, x, y);
-    }
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.92)
-    );
-
-    if (!blob) return;
-
-    const editedFile = new File([blob], `story-${Date.now()}.jpg`, {
-      type: "image/jpeg",
-    });
-
-    onSave(editedFile);
+  if (file.type.startsWith("video")) {
+    onSave(file);
+    return;
   }
+
+  const image = imageRef.current;
+  if (!image) return;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1920;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const canvasRatio = canvas.width / canvas.height;
+
+  let drawWidth = canvas.width;
+  let drawHeight = canvas.height;
+  let drawX = 0;
+  let drawY = 0;
+
+  if (imageRatio > canvasRatio) {
+    drawHeight = canvas.height;
+    drawWidth = drawHeight * imageRatio;
+    drawX = (canvas.width - drawWidth) / 2;
+  } else {
+    drawWidth = canvas.width;
+    drawHeight = drawWidth / imageRatio;
+    drawY = (canvas.height - drawHeight) / 2;
+  }
+
+  ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  applyFilterToCanvas(ctx, canvas.width, canvas.height);
+
+  if (text.trim()) {
+    ctx.font = `900 ${textSize * 2}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
+    ctx.fillStyle = "white";
+
+    const x = (textX / 100) * canvas.width;
+    const y = (textY / 100) * canvas.height;
+
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+  }
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", 0.92)
+  );
+
+  if (!blob) return;
+
+  const editedFile = new File([blob], `story-${Date.now()}.jpg`, {
+    type: "image/jpeg",
+  });
+
+  onSave(editedFile);
+}
 
   return (
     <div className="fixed inset-0 z-[10000] bg-black text-white">
