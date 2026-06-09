@@ -7,7 +7,9 @@ import {
   Heart,
   MapPin,
   MessageCircle,
+  Send,
 } from "lucide-react";
+import { supabase } from "../lib/supabase";
 import GlassCard from "./ui/GlassCard";
 
 type MediaItem = {
@@ -18,14 +20,25 @@ type MediaItem = {
 };
 
 type Profile = {
+  id?: string;
   username: string | null;
   display_name: string | null;
   full_name: string | null;
   avatar_url: string | null;
 };
 
+type Comment = {
+  id: number;
+  post_id: number;
+  user_id: string;
+  comment: string;
+  created_at: string;
+  profile?: Profile;
+};
+
 type Post = {
   id: number;
+  user_id: string;
   content: string | null;
   location_name: string | null;
   created_at: string;
@@ -33,21 +46,25 @@ type Post = {
   media?: MediaItem[];
   like_count?: number;
   comment_count?: number;
+  liked_by_me?: boolean;
+  comments?: Comment[];
 };
 
 export default function PostCard({
   post,
-  onLike,
+  onChanged,
 }: {
   post: Post;
-  onLike?: (postId: number) => void;
+  onChanged?: () => void;
 }) {
   const [currentMedia, setCurrentMedia] = useState(0);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [liking, setLiking] = useState(false);
 
   const media = useMemo(() => {
-    return [...(post.media || [])].sort(
-      (a, b) => a.sort_order - b.sort_order
-    );
+    return [...(post.media || [])].sort((a, b) => a.sort_order - b.sort_order);
   }, [post.media]);
 
   const profileName =
@@ -57,6 +74,75 @@ export default function PostCard({
     "BlueTrail User";
 
   const current = media[currentMedia];
+
+  async function toggleLike() {
+    if (liking) return;
+    setLiking(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setLiking(false);
+      return;
+    }
+
+    if (post.liked_by_me) {
+      await supabase
+        .from("social_likes")
+        .delete()
+        .eq("post_id", post.id)
+        .eq("user_id", user.id);
+    } else {
+      await supabase.from("social_likes").upsert({
+        post_id: post.id,
+        user_id: user.id,
+      });
+    }
+
+    setLiking(false);
+    onChanged?.();
+  }
+
+  async function addComment() {
+    if (!commentText.trim()) return;
+
+    setSubmittingComment(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSubmittingComment(false);
+      return;
+    }
+
+    const { error } = await supabase.from("social_comments").insert({
+      post_id: post.id,
+      user_id: user.id,
+      comment: commentText.trim(),
+    });
+
+    if (!error) {
+      setCommentText("");
+      onChanged?.();
+    } else {
+      alert(error.message);
+    }
+
+    setSubmittingComment(false);
+  }
+
+  function commentName(comment: Comment) {
+    return (
+      comment.profile?.display_name ||
+      comment.profile?.full_name ||
+      comment.profile?.username ||
+      "BlueTrail User"
+    );
+  }
 
   return (
     <GlassCard>
@@ -77,9 +163,7 @@ export default function PostCard({
           <p className="truncate font-black">{profileName}</p>
 
           {post.profile?.username && (
-            <p className="text-xs text-[#0094FF]">
-              @{post.profile.username}
-            </p>
+            <p className="text-xs text-[#0094FF]">@{post.profile.username}</p>
           )}
 
           <p className="mt-1 text-xs text-[#6F7A89]">
@@ -102,18 +186,18 @@ export default function PostCard({
       )}
 
       {media.length > 0 && (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-[#1A2330] bg-[#10161E]">
+        <div className="relative mt-4 overflow-hidden rounded-2xl border border-[#1A2330] bg-[#10161E]">
           {current?.media_type === "video" ? (
             <video
               controls
               src={current.media_url}
-              className="max-h-[500px] w-full object-cover"
+              className="block max-h-[500px] w-full object-cover"
             />
           ) : (
             <img
               src={current?.media_url}
               alt="Post media"
-              className="max-h-[500px] w-full object-cover"
+              className="block max-h-[500px] w-full object-cover"
             />
           )}
 
@@ -146,9 +230,7 @@ export default function PostCard({
                   <div
                     key={index}
                     className={`h-2 w-2 rounded-full ${
-                      currentMedia === index
-                        ? "bg-[#0094FF]"
-                        : "bg-[#3B4653]"
+                      currentMedia === index ? "bg-[#0094FF]" : "bg-[#3B4653]"
                     }`}
                   />
                 ))}
@@ -160,22 +242,66 @@ export default function PostCard({
 
       <div className="mt-4 flex items-center gap-5">
         <button
-          onClick={() => onLike?.(post.id)}
-          className="flex items-center gap-2 text-[#9CA8B8] transition hover:text-red-400"
+          onClick={toggleLike}
+          disabled={liking}
+          className={`flex items-center gap-2 transition ${
+            post.liked_by_me ? "text-red-400" : "text-[#9CA8B8]"
+          }`}
         >
-          <Heart size={20} />
-          <span className="text-sm font-black">
-            {post.like_count || 0}
-          </span>
+          <Heart size={20} fill={post.liked_by_me ? "currentColor" : "none"} />
+          <span className="text-sm font-black">{post.like_count || 0}</span>
         </button>
 
-        <button className="flex items-center gap-2 text-[#9CA8B8] transition hover:text-[#0094FF]">
+        <button
+          onClick={() => setCommentOpen((value) => !value)}
+          className="flex items-center gap-2 text-[#9CA8B8] transition hover:text-[#0094FF]"
+        >
           <MessageCircle size={20} />
-          <span className="text-sm font-black">
-            {post.comment_count || 0}
-          </span>
+          <span className="text-sm font-black">{post.comment_count || 0}</span>
         </button>
       </div>
+
+      {commentOpen && (
+        <div className="mt-5 rounded-2xl border border-[#1A2330] bg-[#05070A] p-4">
+          <div className="grid gap-3">
+            {(post.comments || []).length === 0 ? (
+              <p className="text-sm text-[#6F7A89]">No comments yet.</p>
+            ) : (
+              (post.comments || []).map((comment) => (
+                <div key={comment.id} className="rounded-xl bg-[#10161E] p-3">
+                  <p className="text-sm font-black">{commentName(comment)}</p>
+                  <p className="mt-1 text-sm leading-6 text-[#DDE7F0]">
+                    {comment.comment}
+                  </p>
+                  <p className="mt-2 text-[11px] text-[#6F7A89]">
+                    {new Date(comment.created_at).toLocaleString("en-GB")}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <input
+              value={commentText}
+              onChange={(event) => setCommentText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") addComment();
+              }}
+              placeholder="Write a comment..."
+              className="min-w-0 flex-1 rounded-xl border border-[#1A2330] bg-[#0B0F14] px-4 py-3 text-white outline-none placeholder:text-[#6F7A89]"
+            />
+
+            <button
+              onClick={addComment}
+              disabled={submittingComment}
+              className="rounded-xl bg-[#0094FF] px-4 py-3 text-white"
+            >
+              <Send size={18} />
+            </button>
+          </div>
+        </div>
+      )}
     </GlassCard>
   );
 }

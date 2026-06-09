@@ -27,6 +27,15 @@ type MediaItem = {
   sort_order: number;
 };
 
+type Comment = {
+  id: number;
+  post_id: number;
+  user_id: string;
+  comment: string;
+  created_at: string;
+  profile?: Profile;
+};
+
 type Post = {
   id: number;
   user_id: string;
@@ -37,6 +46,8 @@ type Post = {
   media?: MediaItem[];
   like_count?: number;
   comment_count?: number;
+  liked_by_me?: boolean;
+  comments?: Comment[];
 };
 
 type Story = {
@@ -47,6 +58,12 @@ type Story = {
   created_at: string;
   expires_at: string;
   profile?: Profile;
+};
+
+type Like = {
+  id: number;
+  post_id: number;
+  user_id: string;
 };
 
 export default function CommunityPage() {
@@ -62,6 +79,12 @@ export default function CommunityPage() {
   async function loadCommunity() {
     setLoading(true);
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const currentUserId = user?.id;
+
     const { data: postData } = await supabase
       .from("social_posts")
       .select("*")
@@ -69,46 +92,100 @@ export default function CommunityPage() {
       .limit(50);
 
     const postsBase = (postData as Post[]) || [];
-    const postIds = postsBase.map((post) => post.id);
-    const userIds = Array.from(new Set(postsBase.map((post) => post.user_id)));
 
-    const { data: mediaData } =
-      postIds.length > 0
-        ? await supabase
-            .from("social_post_media")
-            .select("*")
-            .in("post_id", postIds)
-            .order("sort_order", { ascending: true })
-        : { data: [] };
+    if (postsBase.length === 0) {
+      setPosts([]);
+      await loadStories();
+      setLoading(false);
+      return;
+    }
+
+    const postIds = postsBase.map((post) => post.id);
+    const postUserIds = postsBase.map((post) => post.user_id);
+
+    const { data: mediaData } = await supabase
+      .from("social_post_media")
+      .select("*")
+      .in("post_id", postIds)
+      .order("sort_order", { ascending: true });
+
+    const { data: likesData } = await supabase
+      .from("social_likes")
+      .select("*")
+      .in("post_id", postIds);
+
+    const { data: commentsData } = await supabase
+      .from("social_comments")
+      .select("*")
+      .in("post_id", postIds)
+      .order("created_at", { ascending: true });
+
+    const commentUserIds = ((commentsData as Comment[]) || []).map(
+      (comment) => comment.user_id
+    );
+
+    const allUserIds = Array.from(new Set([...postUserIds, ...commentUserIds]));
 
     const { data: profileData } =
-      userIds.length > 0
+      allUserIds.length > 0
         ? await supabase
             .from("profiles")
-            .select("id, username, display_name, full_name, avatar_url")
-            .in("id", userIds)
+            .select("id,username,display_name,full_name,avatar_url")
+            .in("id", allUserIds)
         : { data: [] };
 
     const profileMap: Record<string, Profile> = {};
+    const mediaMap: Record<number, MediaItem[]> = {};
+    const likesMap: Record<number, Like[]> = {};
+    const commentsMap: Record<number, Comment[]> = {};
+
     ((profileData as Profile[]) || []).forEach((profile) => {
       profileMap[profile.id] = profile;
     });
 
-    const mediaMap: Record<number, MediaItem[]> = {};
     ((mediaData as MediaItem[]) || []).forEach((media) => {
-      if (!mediaMap[media.post_id]) mediaMap[media.post_id] = [];
+      if (!mediaMap[media.post_id]) {
+        mediaMap[media.post_id] = [];
+      }
+
       mediaMap[media.post_id].push(media);
     });
 
-    setPosts(
-      postsBase.map((post) => ({
+    ((likesData as Like[]) || []).forEach((like) => {
+      if (!likesMap[like.post_id]) {
+        likesMap[like.post_id] = [];
+      }
+
+      likesMap[like.post_id].push(like);
+    });
+
+    ((commentsData as Comment[]) || []).forEach((comment) => {
+      if (!commentsMap[comment.post_id]) {
+        commentsMap[comment.post_id] = [];
+      }
+
+      commentsMap[comment.post_id].push({
+        ...comment,
+        profile: profileMap[comment.user_id],
+      });
+    });
+
+    const finalPosts = postsBase.map((post) => {
+      const likes = likesMap[post.id] || [];
+      const comments = commentsMap[post.id] || [];
+
+      return {
         ...post,
         profile: profileMap[post.user_id],
         media: mediaMap[post.id] || [],
-        like_count: 0,
-        comment_count: 0,
-      }))
-    );
+        comments,
+        like_count: likes.length,
+        comment_count: comments.length,
+        liked_by_me: likes.some((like) => like.user_id === currentUserId),
+      };
+    });
+
+    setPosts(finalPosts);
 
     await loadStories();
     setLoading(false);
@@ -132,11 +209,12 @@ export default function CommunityPage() {
       userIds.length > 0
         ? await supabase
             .from("profiles")
-            .select("id, username, display_name, full_name, avatar_url")
+            .select("id,username,display_name,full_name,avatar_url")
             .in("id", userIds)
         : { data: [] };
 
     const profileMap: Record<string, Profile> = {};
+
     ((profileData as Profile[]) || []).forEach((profile) => {
       profileMap[profile.id] = profile;
     });
@@ -146,27 +224,6 @@ export default function CommunityPage() {
         ...story,
         profile: profileMap[story.user_id],
       }))
-    );
-  }
-
-  async function likePost(postId: number) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return;
-
-    await supabase.from("social_likes").upsert({
-      post_id: postId,
-      user_id: user.id,
-    });
-
-    setPosts((current) =>
-      current.map((post) =>
-        post.id === postId
-          ? { ...post, like_count: (post.like_count || 0) + 1 }
-          : post
-      )
     );
   }
 
@@ -225,7 +282,11 @@ export default function CommunityPage() {
         ) : (
           <section className="mt-6 grid gap-5">
             {posts.map((post) => (
-              <PostCard key={post.id} post={post} onLike={likePost} />
+              <PostCard
+                key={post.id}
+                post={post}
+                onChanged={loadCommunity}
+              />
             ))}
           </section>
         )}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import StoryEditorModal from "./StoryEditorModal";
 
 type Story = {
   id: number;
@@ -27,10 +28,31 @@ export default function StoriesBar({
   onStoryAdded: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const [activeStory, setActiveStory] = useState<Story | null>(null);
-  const [uploading, setUploading] = useState(false);
 
-  async function addStory(file: File) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [selectedStoryFile, setSelectedStoryFile] = useState<File | null>(null);
+
+  const activeStory =
+    activeIndex !== null && stories[activeIndex] ? stories[activeIndex] : null;
+
+  useEffect(() => {
+    if (activeIndex === null) return;
+
+    const timer = setTimeout(() => {
+      nextStory();
+    }, 6500);
+
+    return () => clearTimeout(timer);
+  }, [activeIndex, stories.length]);
+
+  function handleStoryFile(file: File) {
+    setSelectedStoryFile(file);
+    setEditorOpen(true);
+  }
+
+  async function uploadStory(file: File) {
     setUploading(true);
 
     const {
@@ -43,7 +65,8 @@ export default function StoriesBar({
     }
 
     const mediaType = file.type.startsWith("video") ? "video" : "image";
-    const path = `${user.id}/${Date.now()}-${file.name}`;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${user.id}/${Date.now()}-${safeName}`;
 
     const { error: uploadError } = await supabase.storage
       .from("stories")
@@ -71,9 +94,13 @@ export default function StoriesBar({
 
     if (error) {
       alert(error.message);
+      setUploading(false);
+      return;
     }
 
     setUploading(false);
+    setEditorOpen(false);
+    setSelectedStoryFile(null);
     onStoryAdded();
   }
 
@@ -84,6 +111,26 @@ export default function StoriesBar({
       story.profile?.username ||
       "User"
     );
+  }
+
+  function closeViewer() {
+    setActiveIndex(null);
+  }
+
+  function nextStory() {
+    setActiveIndex((current) => {
+      if (current === null) return null;
+      if (current >= stories.length - 1) return null;
+      return current + 1;
+    });
+  }
+
+  function previousStory() {
+    setActiveIndex((current) => {
+      if (current === null) return null;
+      if (current <= 0) return 0;
+      return current - 1;
+    });
   }
 
   return (
@@ -104,10 +151,10 @@ export default function StoriesBar({
             </span>
           </button>
 
-          {stories.map((story) => (
+          {stories.map((story, index) => (
             <button
               key={story.id}
-              onClick={() => setActiveStory(story)}
+              onClick={() => setActiveIndex(index)}
               className="flex min-w-[86px] flex-col items-center gap-2"
             >
               <div className="rounded-3xl bg-gradient-to-br from-[#0094FF] to-cyan-300 p-[2px]">
@@ -146,23 +193,42 @@ export default function StoriesBar({
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) addStory(file);
+          if (file) handleStoryFile(file);
         }}
+      />
+
+      <StoryEditorModal
+        file={selectedStoryFile}
+        open={editorOpen}
+        onClose={() => {
+          setEditorOpen(false);
+          setSelectedStoryFile(null);
+        }}
+        onSave={uploadStory}
       />
 
       {activeStory && (
         <div className="fixed inset-0 z-[9999] bg-black">
+          <div className="absolute left-4 right-4 top-4 z-20 flex gap-1">
+            {stories.map((_, index) => (
+              <div
+                key={index}
+                className={`h-1 flex-1 rounded-full ${
+                  index <= (activeIndex || 0) ? "bg-white" : "bg-white/25"
+                }`}
+              />
+            ))}
+          </div>
+
           <button
-            onClick={() => setActiveStory(null)}
-            className="absolute right-5 top-5 z-10 rounded-full bg-black/60 p-3 text-white backdrop-blur-xl"
+            onClick={closeViewer}
+            className="absolute right-5 top-10 z-30 rounded-full bg-black/60 p-3 text-white backdrop-blur-xl"
           >
             <X size={24} />
           </button>
 
-          <div className="absolute left-5 top-5 z-10">
-            <p className="font-black text-white">
-              {displayName(activeStory)}
-            </p>
+          <div className="absolute left-5 top-12 z-30">
+            <p className="font-black text-white">{displayName(activeStory)}</p>
             <p className="text-xs text-white/60">
               {new Date(activeStory.created_at).toLocaleString("en-GB")}
             </p>
@@ -182,6 +248,20 @@ export default function StoriesBar({
               className="h-full w-full object-contain"
             />
           )}
+
+          <button
+            onClick={previousStory}
+            className="absolute left-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-3 text-white backdrop-blur-xl"
+          >
+            <ChevronLeft size={24} />
+          </button>
+
+          <button
+            onClick={nextStory}
+            className="absolute right-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-3 text-white backdrop-blur-xl"
+          >
+            <ChevronRight size={24} />
+          </button>
         </div>
       )}
     </>
