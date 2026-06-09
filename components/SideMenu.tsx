@@ -28,7 +28,7 @@ const menuItems = [
     label: "Explore",
   },
   {
-    href: "/communtiy",
+    href: "/community",
     icon: Compass,
     label: "Social",
   },
