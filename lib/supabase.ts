@@ -10,6 +10,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: "bluetrail-auth-session",
+    storage:
+      typeof window !== "undefined" ? window.localStorage : undefined,
   },
 });
