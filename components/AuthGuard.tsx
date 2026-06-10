@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+
   const [checking, setChecking] = useState(true);
+  const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -19,10 +22,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       if (!mounted) return;
 
       if (!session) {
-        router.replace("/login");
+        setAllowed(false);
+        setChecking(false);
+        router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
         return;
       }
 
+      setAllowed(true);
       setChecking(false);
     }
 
@@ -31,10 +37,15 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.replace("/login");
-      } else {
+      if (!mounted) return;
+
+      if (session) {
+        setAllowed(true);
         setChecking(false);
+      } else {
+        setAllowed(false);
+        setChecking(false);
+        router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
       }
     });
 
@@ -42,9 +53,17 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, pathname]);
 
   if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#05070A] text-sm font-black uppercase tracking-[0.2em] text-[#0094FF]">
+        Loading BlueTrail...
+      </div>
+    );
+  }
+
+  if (!allowed) {
     return null;
   }
 
