@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Compass,
@@ -10,6 +11,7 @@ import {
   Shield,
   Waves,
 } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 const slides = [
   {
@@ -40,7 +42,59 @@ const slides = [
 ];
 
 export default function SplashCarousel() {
+  const router = useRouter();
+
+  const [checkingSession, setCheckingSession] = useState(true);
   const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkSession() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (session) {
+        router.replace("/app");
+        return;
+      }
+
+      setCheckingSession(false);
+    }
+
+    checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+
+      if (session) {
+        router.replace("/app");
+      } else {
+        setCheckingSession(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
+  if (checkingSession) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#05070A] text-white">
+        <p className="text-xs font-black uppercase tracking-[0.25em] text-[#0094FF]">
+          Loading BlueTrail...
+        </p>
+      </main>
+    );
+  }
+
   const slide = slides[index];
   const Icon = slide.icon;
 
