@@ -15,6 +15,7 @@ import AppScreen from "../../../components/AppScreen";
 import AuthGuard from "../../../components/AuthGuard";
 import GlassCard from "../../../components/ui/GlassCard";
 import type { RoutePoint } from "../../../components/DiveRouteMap";
+import ShareDiveToFeedButton from "../../../components/ShareDiveToFeedButton";
 import { supabase } from "../../../lib/supabase";
 
 const DiveRouteMap = dynamic(
@@ -45,6 +46,7 @@ type DiveSession = {
 type DivePhoto = {
   id: number;
   image_url: string;
+  media_type: string | null;
   species_name: string | null;
   scientific_name: string | null;
   confidence: number | null;
@@ -266,6 +268,15 @@ export default function SessionDetailPage() {
           <DiveRouteMap points={routePoints} />
         </section>
 
+        <ShareDiveToFeedButton
+          session={session}
+          photos={photos}
+          routePointCount={routePoints.length}
+          onShared={() => {
+            router.push("/community");
+          }}
+        />
+
         {photos.length > 0 && (
           <section className="mt-6">
             <div className="mb-3 flex items-center justify-between">
@@ -281,11 +292,19 @@ export default function SessionDetailPage() {
             <div className="grid gap-3">
               {photos.map((photo) => (
                 <GlassCard key={photo.id}>
-                  <img
-                    src={photo.image_url}
-                    alt={photo.species_name || "Dive photo"}
-                    className="max-h-[360px] w-full rounded-2xl object-cover"
-                  />
+                  {photo.media_type === "video" ? (
+                    <video
+                      src={photo.image_url}
+                      controls
+                      className="max-h-[360px] w-full rounded-2xl object-cover"
+                    />
+                  ) : (
+                    <img
+                      src={photo.image_url}
+                      alt={photo.species_name || "Dive photo"}
+                      className="max-h-[360px] w-full rounded-2xl object-cover"
+                    />
+                  )}
 
                   <div className="mt-4 flex items-start gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#1A2330] bg-[#10161E]">

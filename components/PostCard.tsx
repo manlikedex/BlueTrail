@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   ChevronLeft,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import GlassCard from "./ui/GlassCard";
+import PostRouteMap from "./PostRouteMap";
 
 type MediaItem = {
   id: number;
@@ -42,6 +44,8 @@ type Post = {
   content: string | null;
   location_name: string | null;
   created_at: string;
+  post_type?: string | null;
+  dive_session_id?: number | null;
   profile?: Profile;
   media?: MediaItem[];
   like_count?: number;
@@ -73,10 +77,30 @@ export default function PostCard({
     post.profile?.username ||
     "BlueTrail User";
 
+  const profileHref = post.profile?.username
+    ? `/u/${post.profile.username}`
+    : null;
+
   const current = media[currentMedia];
+
+  async function sendPush(userId: string, title: string, body: string) {
+    await fetch("/api/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId,
+        title,
+        body,
+        url: "/notifications",
+      }),
+    });
+  }
 
   async function toggleLike() {
     if (liking) return;
+
     setLiking(true);
 
     const {
@@ -99,6 +123,23 @@ export default function PostCard({
         post_id: post.id,
         user_id: user.id,
       });
+
+      if (post.user_id !== user.id) {
+        await supabase.from("notifications").insert({
+          user_id: post.user_id,
+          actor_id: user.id,
+          type: "like",
+          title: "New Like",
+          body: "Someone liked your BlueTrail post.",
+          reference_id: post.id,
+        });
+
+        await sendPush(
+          post.user_id,
+          "New Like",
+          "Someone liked your BlueTrail post."
+        );
+      }
     }
 
     setLiking(false);
@@ -119,13 +160,28 @@ export default function PostCard({
       return;
     }
 
+    const text = commentText.trim();
+
     const { error } = await supabase.from("social_comments").insert({
       post_id: post.id,
       user_id: user.id,
-      comment: commentText.trim(),
+      comment: text,
     });
 
     if (!error) {
+      if (post.user_id !== user.id) {
+        await supabase.from("notifications").insert({
+          user_id: post.user_id,
+          actor_id: user.id,
+          type: "comment",
+          title: "New Comment",
+          body: text,
+          reference_id: post.id,
+        });
+
+        await sendPush(post.user_id, "New Comment", text);
+      }
+
       setCommentText("");
       onChanged?.();
     } else {
@@ -144,27 +200,61 @@ export default function PostCard({
     );
   }
 
+  function commentHref(comment: Comment) {
+    return comment.profile?.username ? `/u/${comment.profile.username}` : null;
+  }
+
+  function ProfileAvatar() {
+    const avatar = post.profile?.avatar_url ? (
+      <img
+        src={post.profile.avatar_url}
+        alt={profileName}
+        className="h-12 w-12 rounded-full border border-[#1A2330] object-cover"
+      />
+    ) : (
+      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#1A2330] bg-[#10161E] text-lg font-black">
+        {profileName.charAt(0).toUpperCase()}
+      </div>
+    );
+
+    if (!profileHref) return avatar;
+
+    return <Link href={profileHref}>{avatar}</Link>;
+  }
+
+  function ProfileText() {
+    const text = (
+      <>
+        <p className="truncate font-black">{profileName}</p>
+
+        {post.profile?.username && (
+          <p className="text-xs text-[#0094FF]">@{post.profile.username}</p>
+        )}
+      </>
+    );
+
+    if (!profileHref) return text;
+
+    return (
+      <Link href={profileHref} className="block transition hover:opacity-80">
+        {text}
+      </Link>
+    );
+  }
+
   return (
     <GlassCard>
+      {post.post_type === "dive_log" && (
+        <div className="mb-4 inline-flex rounded-full border border-[#0094FF]/40 bg-[#0094FF]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#7CC6FF]">
+          Shared Dive Log
+        </div>
+      )}
+
       <div className="flex items-start gap-3">
-        {post.profile?.avatar_url ? (
-          <img
-            src={post.profile.avatar_url}
-            alt={profileName}
-            className="h-12 w-12 rounded-full border border-[#1A2330] object-cover"
-          />
-        ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#1A2330] bg-[#10161E] text-lg font-black">
-            {profileName.charAt(0).toUpperCase()}
-          </div>
-        )}
+        <ProfileAvatar />
 
         <div className="min-w-0 flex-1">
-          <p className="truncate font-black">{profileName}</p>
-
-          {post.profile?.username && (
-            <p className="text-xs text-[#0094FF]">@{post.profile.username}</p>
-          )}
+          <ProfileText />
 
           <p className="mt-1 text-xs text-[#6F7A89]">
             {new Date(post.created_at).toLocaleString("en-GB")}
@@ -183,6 +273,10 @@ export default function PostCard({
         <p className="mt-4 whitespace-pre-wrap text-sm leading-7">
           {post.content}
         </p>
+      )}
+
+      {post.post_type === "dive_log" && post.dive_session_id && (
+        <PostRouteMap diveSessionId={post.dive_session_id} />
       )}
 
       {media.length > 0 && (
@@ -267,17 +361,34 @@ export default function PostCard({
             {(post.comments || []).length === 0 ? (
               <p className="text-sm text-[#6F7A89]">No comments yet.</p>
             ) : (
-              (post.comments || []).map((comment) => (
-                <div key={comment.id} className="rounded-xl bg-[#10161E] p-3">
-                  <p className="text-sm font-black">{commentName(comment)}</p>
-                  <p className="mt-1 text-sm leading-6 text-[#DDE7F0]">
-                    {comment.comment}
-                  </p>
-                  <p className="mt-2 text-[11px] text-[#6F7A89]">
-                    {new Date(comment.created_at).toLocaleString("en-GB")}
-                  </p>
-                </div>
-              ))
+              (post.comments || []).map((comment) => {
+                const href = commentHref(comment);
+
+                return (
+                  <div key={comment.id} className="rounded-xl bg-[#10161E] p-3">
+                    {href ? (
+                      <Link
+                        href={href}
+                        className="text-sm font-black transition hover:text-[#0094FF]"
+                      >
+                        {commentName(comment)}
+                      </Link>
+                    ) : (
+                      <p className="text-sm font-black">
+                        {commentName(comment)}
+                      </p>
+                    )}
+
+                    <p className="mt-1 text-sm leading-6 text-[#DDE7F0]">
+                      {comment.comment}
+                    </p>
+
+                    <p className="mt-2 text-[11px] text-[#6F7A89]">
+                      {new Date(comment.created_at).toLocaleString("en-GB")}
+                    </p>
+                  </div>
+                );
+              })
             )}
           </div>
 
