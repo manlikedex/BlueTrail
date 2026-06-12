@@ -78,6 +78,7 @@ export default function DiveTracker() {
 
   const watchIdRef = useRef<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startedAtRef = useRef<number | null>(null);
   const lastSavedPointRef = useRef<RoutePoint | null>(null);
   const lastSavedAtRef = useRef<number>(0);
 
@@ -133,6 +134,16 @@ export default function DiveTracker() {
     };
   }, []);
 
+  function updateTimerFromStart() {
+    if (!startedAtRef.current) return;
+
+    const elapsedSeconds = Math.floor(
+      (Date.now() - startedAtRef.current) / 1000
+    );
+
+    setSeconds(elapsedSeconds);
+  }
+
   async function startDive() {
     setSaving(true);
 
@@ -147,6 +158,7 @@ export default function DiveTracker() {
     }
 
     const now = new Date().toISOString();
+    const startedAtMs = new Date(now).getTime();
 
     const { data, error } = await supabase
       .from("dive_sessions")
@@ -168,16 +180,25 @@ export default function DiveTracker() {
       return;
     }
 
+    startedAtRef.current = startedAtMs;
+
     setSessionId(data.id);
     setTracking(true);
     setSeconds(0);
     setRoutePoints([]);
+
     lastSavedPointRef.current = null;
     lastSavedAtRef.current = 0;
 
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
     timerRef.current = setInterval(() => {
-      setSeconds((value) => value + 1);
+      updateTimerFromStart();
     }, 1000);
+
+    document.addEventListener("visibilitychange", updateTimerFromStart);
 
     if (!navigator.geolocation) {
       alert("GPS is not supported on this device.");
@@ -253,6 +274,8 @@ export default function DiveTracker() {
 
     setSaving(true);
 
+    updateTimerFromStart();
+
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -263,17 +286,23 @@ export default function DiveTracker() {
       timerRef.current = null;
     }
 
+    document.removeEventListener("visibilitychange", updateTimerFromStart);
+
     await syncOfflinePoints();
     setOfflineCount(getOfflinePoints().length);
 
     const now = new Date().toISOString();
+
+    const finalDurationSeconds = startedAtRef.current
+      ? Math.floor((Date.now() - startedAtRef.current) / 1000)
+      : seconds;
 
     const { error } = await supabase
       .from("dive_sessions")
       .update({
         end_time: now,
         ended_at: now,
-        duration_seconds: seconds,
+        duration_seconds: finalDurationSeconds,
         max_depth: maxDepth ? Number(maxDepth) : null,
         descents: descents ? Number(descents) : null,
         water_temp: waterTemp ? Number(waterTemp) : null,
@@ -291,6 +320,7 @@ export default function DiveTracker() {
       return;
     }
 
+    startedAtRef.current = null;
     setTracking(false);
     setSaving(false);
 
@@ -298,8 +328,15 @@ export default function DiveTracker() {
   }
 
   function formatDuration(totalSeconds: number) {
-    const mins = Math.floor(totalSeconds / 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
     const secs = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${String(mins).padStart(2, "0")}:${String(
+        secs
+      ).padStart(2, "0")}`;
+    }
 
     return `${mins}:${String(secs).padStart(2, "0")}`;
   }
@@ -391,8 +428,9 @@ export default function DiveTracker() {
           <p className="text-xl font-black">Live dive session</p>
 
           <p className="mt-2 text-sm leading-6 text-[#9CA8B8]">
-            Keep the app open while tracking. Capture marine life during the
-            session and add your dive details before ending.
+            Keep the app open while tracking. The duration now uses your real
+            start time, so it stays accurate even if the screen locks or the app
+            is backgrounded.
           </p>
 
           <div className="mt-5 grid grid-cols-2 gap-3">
